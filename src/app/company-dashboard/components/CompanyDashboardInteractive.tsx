@@ -15,7 +15,7 @@ import RequisitosPickerModal from '@/components/modals/RequisitosPickerModal';
 import { useAuth } from '@/context/AuthContext';
 
 const API_URL =
-  process.env.NEXT_PUBLIC_CSI_LEGAL_API_URL || 'http://localhost:4000';
+  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 type Mode = 'all' | 'selected';
 type StatusOption = { id: number; label: string };

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Icon from '@/components/ui/AppIcon';
 
-const API_URL = process.env.NEXT_PUBLIC_CSI_LEGAL_API_URL || 'http://localhost:4000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 export interface Requisito {
   id: number;

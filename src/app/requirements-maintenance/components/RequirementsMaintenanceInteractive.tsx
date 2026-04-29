@@ -9,7 +9,7 @@ import UserContextMenu from '@/components/common/UserContextMenu';
 import { useAuth } from '@/context/AuthContext';
 
 const API_URL =
-  process.env.NEXT_PUBLIC_CSI_LEGAL_API_URL || 'http://localhost:4000';
+  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 // =====================
 // Tipos desde API
