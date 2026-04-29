@@ -1,0 +1,212 @@
+@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Primary Colors */
+    --color-primary: #1B5E20; /* green-800 */
+    --color-primary-foreground: #FFFFFF; /* white */
+    
+    /* Secondary Colors */
+    --color-secondary: #2E7D32; /* green-700 */
+    --color-secondary-foreground: #FFFFFF; /* white */
+    
+    /* Accent Colors */
+    --color-accent: #FF8F00; /* amber-700 */
+    --color-accent-foreground: #000000; /* black */
+    
+    /* Background Colors */
+    --color-background: #FAFAFA; /* gray-50 */
+    --color-foreground: #1A1A1A; /* gray-900 */
+    
+    /* Surface Colors */
+    --color-card: #FFFFFF; /* white */
+    --color-card-foreground: #1A1A1A; /* gray-900 */
+    
+    /* Popover Colors */
+    --color-popover: #FFFFFF; /* white */
+    --color-popover-foreground: #1A1A1A; /* gray-900 */
+    
+    /* Muted Colors */
+    --color-muted: #F5F5F5; /* gray-100 */
+    --color-muted-foreground: #525252; /* gray-600 */
+    
+    /* Border Colors */
+    --color-border: rgba(27, 94, 32, 0.12); /* primary with opacity */
+    --color-input: rgba(27, 94, 32, 0.12); /* primary with opacity */
+    
+    /* Ring Colors */
+    --color-ring: #1B5E20; /* green-800 */
+    
+    /* Status Colors */
+    --color-success: #2E7D32; /* green-700 */
+    --color-success-foreground: #FFFFFF; /* white */
+    
+    --color-warning: #F57C00; /* orange-700 */
+    --color-warning-foreground: #FFFFFF; /* white */
+    
+    --color-error: #C62828; /* red-700 */
+    --color-error-foreground: #FFFFFF; /* white */
+    
+    --color-destructive: #C62828; /* red-700 */
+    --color-destructive-foreground: #FFFFFF; /* white */
+    
+    /* Radius */
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --radius-xl: 18px;
+    
+    /* Shadows */
+    --shadow-sm: 0 1px 3px rgba(27, 94, 32, 0.08);
+    --shadow-md: 0 4px 6px rgba(27, 94, 32, 0.10);
+    --shadow-lg: 0 10px 15px rgba(27, 94, 32, 0.12);
+    --shadow-xl: 0 20px 40px -8px rgba(27, 94, 32, 0.16);
+  }
+
+  .dark {
+    /* Primary Colors */
+    --color-primary: #4CAF50; /* green-500 */
+    --color-primary-foreground: #0F0F0F; /* gray-950 */
+    
+    /* Secondary Colors */
+    --color-secondary: #66BB6A; /* green-400 */
+    --color-secondary-foreground: #0F0F0F; /* gray-950 */
+    
+    /* Accent Colors */
+    --color-accent: #FFB74D; /* amber-400 */
+    --color-accent-foreground: #0F0F0F; /* gray-950 */
+    
+    /* Background Colors */
+    --color-background: #0F0F0F; /* gray-950 */
+    --color-foreground: #EBEBEB; /* gray-100 with 92% opacity */
+    
+    /* Surface Colors */
+    --color-card: #1A1A1A; /* gray-900 */
+    --color-card-foreground: #EBEBEB; /* gray-100 with 92% opacity */
+    
+    /* Popover Colors */
+    --color-popover: #1A1A1A; /* gray-900 */
+    --color-popover-foreground: #EBEBEB; /* gray-100 with 92% opacity */
+    
+    /* Muted Colors */
+    --color-muted: #262626; /* gray-800 */
+    --color-muted-foreground: #A3A3A3; /* gray-400 */
+    
+    /* Border Colors */
+    --color-border: rgba(46, 125, 50, 0.2); /* secondary with opacity */
+    --color-input: rgba(46, 125, 50, 0.2); /* secondary with opacity */
+    
+    /* Ring Colors */
+    --color-ring: #4CAF50; /* green-500 */
+    
+    /* Status Colors */
+    --color-success: #66BB6A; /* green-400 */
+    --color-success-foreground: #0F0F0F; /* gray-950 */
+    
+    --color-warning: #FFA726; /* orange-400 */
+    --color-warning-foreground: #0F0F0F; /* gray-950 */
+    
+    --color-error: #EF5350; /* red-400 */
+    --color-error-foreground: #0F0F0F; /* gray-950 */
+    
+    --color-destructive: #EF5350; /* red-400 */
+    --color-destructive-foreground: #0F0F0F; /* gray-950 */
+    
+    /* Shadows - Glow effects for dark mode */
+    --shadow-sm: 0 1px 3px rgba(46, 125, 50, 0.2);
+    --shadow-md: 0 4px 6px rgba(46, 125, 50, 0.2);
+    --shadow-lg: 0 10px 15px rgba(46, 125, 50, 0.2);
+    --shadow-xl: 0 20px 40px -8px rgba(46, 125, 50, 0.2);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  
+  h1 {
+    @apply text-4xl leading-tight font-semibold;
+  }
+  
+  h2 {
+    @apply text-3xl leading-snug font-semibold;
+  }
+  
+  h3 {
+    @apply text-2xl leading-normal font-medium;
+  }
+  
+  h4 {
+    @apply text-xl leading-relaxed font-medium;
+  }
+  
+  h5 {
+    @apply text-lg leading-normal font-medium;
+  }
+  
+  p {
+    max-width: 70ch;
+  }
+  
+  code, .code {
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  
+  small, .caption {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    @apply text-sm leading-relaxed;
+    letter-spacing: -0.01em;
+  }
+  
+  @media (max-width: 640px) {
+    body {
+      font-size: 15px;
+    }
+  }
+}
+
+@layer utilities {
+  .transition-smooth {
+    transition: all 250ms ease-out;
+  }
+  
+  .shadow-elevation-0 {
+    box-shadow: none;
+  }
+  
+  .shadow-elevation-1 {
+    box-shadow: var(--shadow-sm);
+  }
+  
+  .shadow-elevation-2 {
+    box-shadow: var(--shadow-md);
+  }
+  
+  .shadow-elevation-3 {
+    box-shadow: var(--shadow-lg);
+  }
+  
+  .shadow-elevation-4 {
+    box-shadow: var(--shadow-xl);
+  }
+}
