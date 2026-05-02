@@ -32,6 +32,18 @@ interface DashboardItem {
   plannedDate: string;
   periodicity: string;
   lastUpdate: string;
+
+  // ==========================================================
+  // CAMPOS DEL DETALLE DE EVALUACIÓN
+  // Estos campos vienen desde EvaluacionDetalle. Los dejamos
+  // opcionales para que la tabla y el modal puedan recibir tanto
+  // el formato normalizado del front como los nombres crudos de API.
+  // ==========================================================
+  responsable?: string | null;
+  fechaPlanificada?: string | null;
+  idPeriocidad?: number | null;
+  periocidad?: string | null;
+  ultimaActualizacion?: string | null;
 }
 
 interface ChartSlice {
@@ -145,6 +157,16 @@ export default function CompanyDashboardInteractive() {
     : false;
 
   // ==========================================================
+  // GUARDAR CAMBIOS EN EVALUACIÓN
+  // Este permiso controla la visibilidad del botón del encabezado.
+  // Se usa EVALUACIONES_EDITAR porque este botón actualiza
+  // EvaluacionEncabezado y no debe verlo el usuario Empresa_Lector.
+  // ==========================================================
+  const canSaveEvaluationChanges = selectedCompanyId
+    ? hasEmpresaPermission(selectedCompanyId, 'EVALUACIONES_EDITAR')
+    : false;
+
+  // ==========================================================
   // 7) Estado base / auth
   // ==========================================================
   const [isHydrated, setIsHydrated] = useState(false);
@@ -159,6 +181,16 @@ export default function CompanyDashboardInteractive() {
   const [evaluacion, setEvaluacion] = useState<any>(null);
   const [chartData, setChartData] = useState<ChartSlice[]>([]);
   const [items, setItems] = useState<DashboardItem[]>([]);
+
+  // ==========================================================
+  // GUARDAR CAMBIOS EN EVALUACIÓN
+  // Estado visual del botón que guarda el resumen del encabezado.
+  // Cuando se presiona, el backend debe actualizar:
+  // - EvaluacionEncabezado.UltimaVerificacion
+  // - EvaluacionEncabezado.UltimoHistorico
+  // - EvaluacionEncabezado.ProximoEvento
+  // ==========================================================
+  const [savingEvaluationChanges, setSavingEvaluationChanges] = useState(false);
 
   // ==========================================================
   // 9) Catálogo de estados
@@ -368,10 +400,27 @@ export default function CompanyDashboardInteractive() {
         description: String(x.description ?? ''),
         estadoId: Number(x.estadoId),
         status: String(x.status ?? ''),
-        responsible: String(x.responsible ?? '—'),
-        plannedDate: String(x.plannedDate ?? '—'),
-        periodicity: String(x.periodicity ?? '—'),
-        lastUpdate: String(x.lastUpdate ?? ''),
+        responsible: String(x.responsible ?? x.responsable ?? 'No definido'),
+        plannedDate: String(
+          x.plannedDate ?? x.fechaPlanificada ?? 'No definido'
+        ),
+        periodicity: String(x.periodicity ?? x.periocidad ?? 'No definido'),
+        lastUpdate: String(
+          x.lastUpdate ?? x.ultimaActualizacion ?? x.UltimaActualizacion ?? ''
+        ),
+
+        // ==========================================================
+        // CAMPOS DEL DETALLE DE EVALUACIÓN
+        // Se pasan también en formato auxiliar para que ItemsTable
+        // e ItemDetailModal puedan mostrar los valores reales guardados
+        // en EvaluacionDetalle.
+        // ==========================================================
+        responsable: x.responsable ?? x.responsible ?? null,
+        fechaPlanificada: x.fechaPlanificada ?? x.plannedDate ?? null,
+        idPeriocidad: x.idPeriocidad ?? x.IdPeriocidad ?? null,
+        periocidad: x.periocidad ?? x.periodicity ?? null,
+        ultimaActualizacion:
+          x.ultimaActualizacion ?? x.UltimaActualizacion ?? x.lastUpdate ?? null,
       }));
 
       setItems(normalized);
@@ -391,6 +440,75 @@ export default function CompanyDashboardInteractive() {
       setChartData([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ==========================================================
+  // GUARDAR CAMBIOS EN EVALUACIÓN
+  // Este método se ejecuta desde el botón del encabezado.
+  // No actualiza un requisito individual; actualiza el resumen general
+  // de EvaluacionEncabezado para la evaluación activa de la empresa.
+  //
+  // Endpoint esperado:
+  // PUT /api/evaluaciones/:evaluacionId/guardar-cambios
+  //
+  // Respuesta esperada:
+  // {
+  //   message: "Cambios de evaluación guardados correctamente",
+  //   Evaluacion: { ... }
+  // }
+  // ==========================================================
+  const handleSaveEvaluationChanges = async () => {
+    if (!canSaveEvaluationChanges) return;
+
+    if (!evaluacion?.id) {
+      setApiError('No se encontró la evaluación activa.');
+      return;
+    }
+
+    const token = localStorage.getItem('CSI_Legal_token');
+    const url = `${API_URL}/api/evaluaciones/${evaluacion.id}/guardar-cambios`;
+
+    setSavingEvaluationChanges(true);
+    setApiError(null);
+
+    try {
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      const json = await res.json().catch(() => ({}));
+
+      if (res.status === 401) {
+        logout();
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error(
+          json?.message || 'No se pudieron guardar los cambios de evaluación'
+        );
+      }
+
+      // Actualizamos el encabezado local para que los 3 KPI cambien
+      // inmediatamente sin obligar a recargar toda la página.
+      if (json?.Evaluacion) {
+        setEvaluacion(json.Evaluacion);
+      }
+
+      // También recargamos el dashboard para mantener sincronizados:
+      // - KPIs
+      // - tabla
+      // - gráfico
+      await loadDashboard();
+    } catch (e: any) {
+      setApiError(e?.message || 'Error guardando cambios de evaluación');
+    } finally {
+      setSavingEvaluationChanges(false);
     }
   };
 
@@ -814,16 +932,45 @@ export default function CompanyDashboardInteractive() {
 
       <div className="container mx-auto px-4 py-6">
         <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <h2 className="text-3xl font-semibold text-foreground mb-2">
-              Empresa:{' '}
-              {companyInfoLoading
-                ? 'Cargando...'
-                : companyName || `ID: ${selectedCompany}`}
-            </h2>
-            <p className="text-muted-foreground font-caption">
-              Gestión de requisitos legales y cumplimiento normativo
-            </p>
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+            <div>
+              <h2 className="text-3xl font-semibold text-foreground mb-2">
+                Empresa:{' '}
+                {companyInfoLoading
+                  ? 'Cargando...'
+                  : companyName || `ID: ${selectedCompany}`}
+              </h2>
+
+              <p className="text-muted-foreground font-caption">
+                Gestión de requisitos legales y cumplimiento normativo
+              </p>
+            </div>
+
+            {/* ======================================================
+                GUARDAR CAMBIOS EN EVALUACIÓN
+                Botón visible únicamente para usuario con permiso
+                EVALUACIONES_EDITAR. No debe mostrarse a Empresa_Lector.
+
+                Este botón no guarda un requisito individual. Su objetivo
+                es consolidar/actualizar los campos del encabezado:
+                - Última Verificación
+                - Último Registro Histórico
+                - Próximo Evento
+               ====================================================== */}
+            {canSaveEvaluationChanges ? (
+              <button
+                onClick={handleSaveEvaluationChanges}
+                disabled={savingEvaluationChanges || !evaluacion?.id}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-primary-foreground bg-primary rounded-md hover:bg-primary/90 transition-smooth shadow-elevation-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Icon name="ArrowPathIcon" size={18} />
+                <span>
+                  {savingEvaluationChanges
+                    ? 'Guardando evaluación...'
+                    : 'Guardar Cambios en Evaluación'}
+                </span>
+              </button>
+            ) : null}
           </div>
 
           {loadingStates && (
@@ -936,7 +1083,11 @@ export default function CompanyDashboardInteractive() {
           setIsItemDetailModalOpen(false);
           setSelectedItem(null);
         }}
-        onSave={() => {}}
+        onSave={async () => {
+          // Al guardar información desde el modal, recargamos el dashboard
+          // para refrescar tabla, KPIs y cualquier dato derivado.
+          await loadDashboard();
+        }}
       />
     </div>
   );

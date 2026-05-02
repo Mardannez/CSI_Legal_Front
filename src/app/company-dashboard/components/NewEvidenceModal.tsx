@@ -5,7 +5,7 @@ import Icon from '@/components/ui/AppIcon';
 import type React from 'react';
 
 const API_URL =
-  process.env.NEXT_PUBLIC_CSI_LEGAL_API_URL || 'http://localhost:4000';
+  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 interface NewEvidenceModalProps {
   isOpen: boolean;
