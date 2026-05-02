@@ -16,6 +16,23 @@ interface ComplianceItem {
   plannedDate: string;
   periodicity: string;
   lastUpdate: string;
+
+  // ==========================================================
+  // CAMPOS DEL DETALLE DE EVALUACIÓN
+  // Estos campos vienen desde EvaluacionDetalle y pueden variar
+  // por empresa/requisito. Se agregan como opcionales para soportar
+  // tanto el formato actual del dashboard como el formato real de la API.
+  // ==========================================================
+  responsable?: string | null;
+  Responsable?: string | null;
+  fechaPlanificada?: string | null;
+  FechaPlanificada?: string | null;
+  idPeriocidad?: number | null;
+  IdPeriocidad?: number | null;
+  periocidad?: string | null;
+  Periocidad?: string | null;
+  ultimaActualizacion?: string | null;
+  UltimaActualizacion?: string | null;
 }
 
 interface ItemsTableProps {
@@ -33,6 +50,34 @@ interface ItemsTableProps {
 
   // Si el usuario no puede editar, solo verá el texto del estado
   canEditStatus?: boolean;
+}
+
+function formatDisplayDate(value?: string | null) {
+  if (!value || value === '—' || value === 'No definido') return 'No definido';
+
+  const raw = String(value).trim();
+
+  // Si ya viene en formato dd/mm/yyyy, lo mostramos tal cual.
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+    return raw;
+  }
+
+  const d = new Date(raw);
+
+  if (Number.isNaN(d.getTime())) {
+    return raw;
+  }
+
+  return d.toLocaleDateString('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+}
+
+function normalizeText(value?: string | null) {
+  const text = String(value || '').trim();
+  return text || 'No definido';
 }
 
 export default function ItemsTable({
@@ -83,11 +128,59 @@ export default function ItemsTable({
     setSortConfig({ key, direction });
   };
 
-  const sortedItems = [...items].sort((a, b) => {
-    if (!sortConfig) return 0;
+  // ==========================================================
+  // CAMPOS DEL DETALLE DE EVALUACIÓN
+  // Estos helpers leen primero los nuevos campos guardados en
+  // EvaluacionDetalle. Si todavía el dashboard manda el formato anterior,
+  // se usan los campos legacy como fallback.
+  // ==========================================================
+  const getResponsibleText = (item: ComplianceItem) => {
+    return normalizeText(
+      item.responsable ?? item.Responsable ?? item.responsible
+    );
+  };
 
-    const aValue = a[sortConfig.key] as any;
-    const bValue = b[sortConfig.key] as any;
+  const getPlannedDateText = (item: ComplianceItem) => {
+    return formatDisplayDate(
+      item.fechaPlanificada ?? item.FechaPlanificada ?? item.plannedDate
+    );
+  };
+
+  const getPeriodicityText = (item: ComplianceItem) => {
+    const periodicityName =
+      item.periocidad ?? item.Periocidad ?? item.periodicity ?? '';
+
+    const normalizedPeriodicity = String(periodicityName || '').trim();
+    const lowerPeriodicity = normalizedPeriodicity.toLowerCase();
+
+    // Si el backend todavía manda un texto genérico como "Periodicidad #1",
+    // no lo mostramos como dato real. El dato correcto debe ser el nombre
+    // de la tabla Periocidad; si no viene, mostramos "No definido".
+    if (
+      lowerPeriodicity === 'periodicidad' ||
+      lowerPeriodicity.startsWith('periodicidad #')
+    ) {
+      return 'No definido';
+    }
+
+    return normalizeText(normalizedPeriodicity);
+  };
+
+  const getSortableValue = (item: ComplianceItem, key: keyof ComplianceItem) => {
+    if (key === 'responsible') return getResponsibleText(item);
+    if (key === 'plannedDate') return getPlannedDateText(item);
+    if (key === 'periodicity') return getPeriodicityText(item);
+
+    return item[key] as any;
+  };
+
+  const sortedItems = [...items].sort((a, b) => {
+    // Orden base ascendente por id del EvaluacionDetalle.
+    // Esto mantiene la tabla de 1 a infinito cuando no hay orden manual.
+    if (!sortConfig) return Number(a.id) - Number(b.id);
+
+    const aValue = getSortableValue(a, sortConfig.key);
+    const bValue = getSortableValue(b, sortConfig.key);
 
     if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
     if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
@@ -200,9 +293,21 @@ export default function ItemsTable({
               </th>
 
               <th className="px-6 py-4 text-left">
-                <span className="text-sm font-semibold text-foreground">
+                <button
+                  onClick={() => handleSort('periodicity')}
+                  className="flex items-center gap-2 text-sm font-semibold text-foreground hover:text-primary transition-smooth"
+                >
                   Periodicidad
-                </span>
+                  <Icon
+                    name={
+                      sortConfig?.key === 'periodicity' &&
+                      sortConfig.direction === 'desc'
+                        ? 'ChevronDownIcon'
+                        : 'ChevronUpIcon'
+                    }
+                    size={16}
+                  />
+                </button>
               </th>
 
               <th className="px-6 py-4 text-right">
@@ -232,15 +337,21 @@ export default function ItemsTable({
                 <td className="px-6 py-4">{renderStatusCell(item)}</td>
 
                 <td className="px-6 py-4">
-                  <p className="text-sm text-foreground">{item.responsible}</p>
+                  <p className="text-sm text-foreground">
+                    {getResponsibleText(item)}
+                  </p>
                 </td>
 
                 <td className="px-6 py-4">
-                  <p className="text-sm text-foreground">{item.plannedDate}</p>
+                  <p className="text-sm text-foreground">
+                    {getPlannedDateText(item)}
+                  </p>
                 </td>
 
                 <td className="px-6 py-4">
-                  <p className="text-sm text-foreground">{item.periodicity}</p>
+                  <p className="text-sm text-foreground">
+                    {getPeriodicityText(item)}
+                  </p>
                 </td>
 
                 <td className="px-6 py-4">
@@ -290,7 +401,9 @@ export default function ItemsTable({
                   size={16}
                   className="text-muted-foreground"
                 />
-                <span className="text-foreground">{item.responsible}</span>
+                <span className="text-foreground">
+                  {getResponsibleText(item)}
+                </span>
               </div>
 
               <div className="flex items-center gap-2">
@@ -299,7 +412,9 @@ export default function ItemsTable({
                   size={16}
                   className="text-muted-foreground"
                 />
-                <span className="text-foreground">{item.plannedDate}</span>
+                <span className="text-foreground">
+                  {getPlannedDateText(item)}
+                </span>
               </div>
 
               <div className="flex items-center gap-2">
@@ -308,7 +423,9 @@ export default function ItemsTable({
                   size={16}
                   className="text-muted-foreground"
                 />
-                <span className="text-foreground">{item.periodicity}</span>
+                <span className="text-foreground">
+                  {getPeriodicityText(item)}
+                </span>
               </div>
             </div>
 

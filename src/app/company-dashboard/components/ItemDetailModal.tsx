@@ -19,6 +19,16 @@ interface ComplianceItem {
   plannedDate: string;
   periodicity: string;
   lastUpdate: string;
+
+  // ==========================================================
+  // INFORMACIÓN DEL DETALLE DE EVALUACIÓN
+  // Nuevos campos propios de EvaluacionDetalle.
+  // Se usan para guardar información que varía por empresa/requisito,
+  // sin modificar el catálogo maestro del requisito.
+  // ==========================================================
+  fechaPlanificada?: string | null; // yyyy-MM-dd para input type="date"
+  idPeriocidad?: number | null; // FK hacia tabla Periocidad
+  ultimaActualizacion?: string | null; // campo real en BD: UltimaActualizacion
 }
 
 interface ItemDetailModalProps {
@@ -103,6 +113,15 @@ interface AuditEntry {
   details: string;
 }
 
+// ==========================================================
+// INFORMACIÓN DEL DETALLE DE EVALUACIÓN
+// Opciones de periodicidad leídas desde tabla Periocidad.
+// ==========================================================
+interface PeriodicityOption {
+  id: number;
+  name: string;
+}
+
 function getToken() {
   if (typeof window === 'undefined') return '';
   return localStorage.getItem('CSI_Legal_token') || '';
@@ -118,6 +137,31 @@ function formatApiDate(value?: string | null) {
     month: '2-digit',
     year: 'numeric',
   });
+}
+
+// ==========================================================
+// INFORMACIÓN DEL DETALLE DE EVALUACIÓN
+// Normaliza fechas para input type="date".
+// Acepta formatos yyyy-MM-dd, ISO y dd/mm/yyyy.
+// ==========================================================
+function formatDateForInput(value?: string | null) {
+  if (!value || value === '—') return '';
+
+  const raw = String(value).trim();
+
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
+    return raw.slice(0, 10);
+  }
+
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+    const [day, month, year] = raw.split('/');
+    return `${year}-${month}-${day}`;
+  }
+
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return '';
+
+  return d.toISOString().slice(0, 10);
 }
 
 function guessTypeFromName(name: string) {
@@ -192,6 +236,24 @@ export default function ItemDetailModal({
   const [activeTab, setActiveTab] = useState<TabType>('info');
   const [isEditMode, setIsEditMode] = useState(false);
   const [editedItem, setEditedItem] = useState<ComplianceItem | null>(null);
+
+  // ==========================================================
+  // INFORMACIÓN DEL DETALLE DE EVALUACIÓN
+  // Estado local para leer/guardar campos propios del detalle:
+  // FechaPlanificada, Responsable, IdPeriocidad y UltimaActualizacion.
+  // Nombre, descripción y estado siguen siendo solo lectura aquí.
+  // ==========================================================
+  const [infoSnapshot, setInfoSnapshot] = useState<ComplianceItem | null>(null);
+  const [loadingInfo, setLoadingInfo] = useState(false);
+  const [savingInfo, setSavingInfo] = useState(false);
+  const [infoError, setInfoError] = useState<string | null>(null);
+  const [periodicityOptions, setPeriodicityOptions] = useState<
+    PeriodicityOption[]
+  >([]);
+  const [loadingPeriodicities, setLoadingPeriodicities] = useState(false);
+  const [periodicitiesError, setPeriodicitiesError] = useState<string | null>(
+    null
+  );
 
   // ==========================================================
   // REFERENCIA LEGAL
@@ -290,8 +352,14 @@ export default function ItemDetailModal({
     if (isOpen) {
       document.body.style.overflow = 'hidden';
       setEditedItem(item);
+      setInfoSnapshot(item);
       setIsEditMode(false);
       setActiveTab('info');
+
+      setInfoError(null);
+      setLoadingInfo(false);
+      setSavingInfo(false);
+      setPeriodicitiesError(null);
 
       setSelectedLegalItem(null);
       setSelectedEvidence(null);
@@ -368,6 +436,167 @@ export default function ItemDetailModal({
 
     return json;
   };
+
+  // ==========================================================
+  // INFORMACIÓN DEL DETALLE DE EVALUACIÓN
+  // Mapea la respuesta del endpoint:
+  // GET /api/evaluaciones/detalle/:detalleId/informacion
+  // hacia el modelo usado por la modal.
+  // ==========================================================
+  const mapDetalleInformacionToItem = (
+    info: any,
+    previousItem: ComplianceItem
+  ): ComplianceItem => {
+    const fechaPlanificadaRaw =
+      info?.fechaPlanificada ?? info?.FechaPlanificada ?? null;
+
+    const ultimaActualizacionRaw =
+      info?.ultimaActualizacion ??
+      info?.UltimaActualizacion ??
+      info?.lastUpdate ??
+      info?.LastUpdate ??
+      null;
+
+    const idPeriocidadRaw = info?.idPeriocidad ?? info?.IdPeriocidad ?? null;
+
+    return {
+      ...previousItem,
+      id: Number(info?.id ?? previousItem.id),
+      evaluacionId:
+        Number(info?.evaluacionId ?? info?.IdEvaluacionEncabezado) ||
+        previousItem.evaluacionId,
+      requisitoId:
+        Number(info?.requisitoId ?? info?.IdRequisito) ||
+        previousItem.requisitoId,
+      name: String(
+        info?.name ??
+          info?.nombreRequisito ??
+          info?.Titulo ??
+          previousItem.name ??
+          ''
+      ),
+      description: String(
+        info?.description ??
+          info?.descripcion ??
+          info?.DescripcionRequisito ??
+          previousItem.description ??
+          ''
+      ),
+      status: String(
+        info?.status ?? info?.estado ?? info?.Estado ?? previousItem.status ?? ''
+      ),
+
+      // Campos del detalle que sí se editan desde la pestaña Información.
+      responsible: String(
+        info?.responsible ??
+          info?.responsable ??
+          info?.Responsable ??
+          previousItem.responsible ??
+          ''
+      ),
+      plannedDate: formatApiDate(fechaPlanificadaRaw),
+      fechaPlanificada: formatDateForInput(fechaPlanificadaRaw),
+      idPeriocidad: idPeriocidadRaw ? Number(idPeriocidadRaw) : null,
+      periodicity: String(
+        info?.periodicity ??
+          info?.periocidad ??
+          info?.Periocidad ??
+          previousItem.periodicity ??
+          '—'
+      ),
+
+      // Campo real en BD: UltimaActualizacion.
+      lastUpdate: ultimaActualizacionRaw
+        ? String(ultimaActualizacionRaw)
+        : previousItem.lastUpdate || '—',
+      ultimaActualizacion: ultimaActualizacionRaw
+        ? String(ultimaActualizacionRaw)
+        : previousItem.ultimaActualizacion || null,
+    };
+  };
+
+  // ==========================================================
+  // INFORMACIÓN DEL DETALLE DE EVALUACIÓN
+  // Carga el detalle actual. Este endpoint trae información combinada:
+  // datos de catálogo del requisito + datos editables del EvaluacionDetalle.
+  // ==========================================================
+  const loadDetalleInformacion = async (detalleId: number) => {
+    setLoadingInfo(true);
+    setInfoError(null);
+
+    try {
+      const json = await fetchJson(
+        `${API_URL}/api/evaluaciones/detalle/${detalleId}/informacion`
+      );
+
+      const info = json?.Informacion || json?.Detalle || json?.data || json;
+      const base = editedItem || item;
+
+      if (!base) return;
+
+      const mapped = mapDetalleInformacionToItem(info, base);
+
+      setEditedItem(mapped);
+      setInfoSnapshot(mapped);
+    } catch (e: any) {
+      setInfoError(e?.message || 'Error cargando información del requisito');
+    } finally {
+      setLoadingInfo(false);
+    }
+  };
+
+  // ==========================================================
+  // INFORMACIÓN DEL DETALLE DE EVALUACIÓN
+  // Carga las opciones de la tabla Periocidad para editar IdPeriocidad.
+  // Si el endpoint devuelve otra forma, se intenta mapear de forma tolerante.
+  // ==========================================================
+  const loadPeriodicityOptions = async () => {
+    setLoadingPeriodicities(true);
+    setPeriodicitiesError(null);
+
+    try {
+      const json = await fetchJson(`${API_URL}/api/periocidad`);
+
+      const rows = Array.isArray(json)
+        ? json
+        : Array.isArray(json?.Periocidades)
+          ? json.Periocidades
+          : Array.isArray(json?.Periocidad)
+            ? json.Periocidad
+            : Array.isArray(json?.data)
+              ? json.data
+              : Array.isArray(json?.items)
+                ? json.items
+                : [];
+
+      const mapped: PeriodicityOption[] = rows
+        .map((row: any) => ({
+          id: Number(row.id),
+          name: String(
+            row.Periocidad ||
+              row.Nombre ||
+              row.Descripcion ||
+              row.NombrePeriocidad ||
+              `Periodicidad #${row.id}`
+          ),
+        }))
+        .filter((row: PeriodicityOption) => Number.isInteger(row.id) && row.id > 0);
+
+      setPeriodicityOptions(mapped);
+    } catch (e: any) {
+      setPeriodicitiesError(e?.message || 'Error cargando periodicidades');
+      setPeriodicityOptions([]);
+    } finally {
+      setLoadingPeriodicities(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isOpen || !item?.id) return;
+
+    loadDetalleInformacion(item.id);
+    loadPeriodicityOptions();
+  }, [isOpen, item?.id]);
 
   // ==========================================================
   // REFERENCIA LEGAL
@@ -912,6 +1141,8 @@ export default function ItemDetailModal({
 
   if (!isOpen || !isHydrated || !item) return null;
 
+  const displayItem = editedItem || item;
+
   const tabs = [
     { id: 'info' as TabType, label: 'Información', icon: 'InformationCircleIcon' },
     { id: 'legal' as TabType, label: 'Referencia Legal', icon: 'ScaleIcon' },
@@ -921,16 +1152,77 @@ export default function ItemDetailModal({
     { id: 'audit' as TabType, label: 'Historial de Auditoría', icon: 'ClockIcon' },
   ];
 
-  const handleSave = () => {
-    if (editedItem) {
-      onSave(editedItem);
+  // ==========================================================
+  // INFORMACIÓN DEL DETALLE DE EVALUACIÓN
+  // Guarda únicamente los campos propios de EvaluacionDetalle.
+  // No modifica nombre, descripción ni estado del requisito.
+  // ==========================================================
+  const handleSave = async () => {
+    if (!editedItem) return;
+
+    const fechaPlanificada = formatDateForInput(
+      editedItem.fechaPlanificada || editedItem.plannedDate
+    );
+
+    const responsable = (editedItem.responsible || '').trim();
+    const idPeriocidad = editedItem.idPeriocidad
+      ? Number(editedItem.idPeriocidad)
+      : null;
+
+    if (!fechaPlanificada) {
+      alert('Seleccione la fecha planificada');
+      return;
+    }
+
+    if (!responsable) {
+      alert('Ingrese el responsable');
+      return;
+    }
+
+    if (!idPeriocidad) {
+      alert('Seleccione la periodicidad');
+      return;
+    }
+
+    setSavingInfo(true);
+    setInfoError(null);
+
+    try {
+      const json = await fetchJson(
+        `${API_URL}/api/evaluaciones/detalle/${editedItem.id}/informacion`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            fechaPlanificada,
+            responsable,
+            idPeriocidad,
+          }),
+        }
+      );
+
+      const info = json?.Informacion || json?.Detalle || json?.data || json;
+      const updatedItem = mapDetalleInformacionToItem(info, editedItem);
+
+      setEditedItem(updatedItem);
+      setInfoSnapshot(updatedItem);
+      onSave(updatedItem);
       setIsEditMode(false);
+    } catch (e: any) {
+      const message = e?.message || 'Error guardando información';
+      setInfoError(message);
+      alert(message);
+    } finally {
+      setSavingInfo(false);
     }
   };
 
   const handleCancel = () => {
-    setEditedItem(item);
+    setEditedItem(infoSnapshot || item);
     setIsEditMode(false);
+    setInfoError(null);
   };
 
   const handleChange = (field: keyof ComplianceItem, value: string) => {
@@ -946,7 +1238,7 @@ export default function ItemDetailModal({
           <div className="flex items-center justify-between px-6 py-4 border-b border-border">
             <div className="flex-1">
               <h2 className="text-xl font-semibold text-foreground">
-                {item.name}
+                {displayItem.name}
               </h2>
               <p className="text-sm text-muted-foreground mt-1">ID: {item.id}</p>
             </div>
@@ -993,6 +1285,23 @@ export default function ItemDetailModal({
           <div className="flex-1 overflow-y-auto px-6 py-6">
             {activeTab === 'info' && (
               <div className="space-y-6">
+                {/* ======================================================
+                    INFORMACIÓN DEL DETALLE DE EVALUACIÓN
+                    Mensajes de carga/error para la lectura y guardado
+                    de los campos propios del detalle.
+                   ====================================================== */}
+                {loadingInfo && (
+                  <div className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+                    Cargando información del requisito...
+                  </div>
+                )}
+
+                {infoError && (
+                  <div className="rounded-md border border-error/30 bg-error/10 px-4 py-3 text-sm text-error">
+                    {infoError}
+                  </div>
+                )}
+
                 {isEditMode ? (
                   <>
                     <div>
@@ -1002,9 +1311,12 @@ export default function ItemDetailModal({
                       <input
                         type="text"
                         value={editedItem?.name || ''}
-                        onChange={(e) => handleChange('name', e.target.value)}
-                        className="w-full px-4 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-smooth"
+                        disabled
+                        className="w-full px-4 py-2 border border-input rounded-md bg-muted text-muted-foreground cursor-not-allowed"
                       />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Este campo pertenece al catálogo del requisito y no se edita desde la evaluación.
+                      </p>
                     </div>
 
                     <div>
@@ -1013,12 +1325,13 @@ export default function ItemDetailModal({
                       </label>
                       <textarea
                         value={editedItem?.description || ''}
-                        onChange={(e) =>
-                          handleChange('description', e.target.value)
-                        }
+                        disabled
                         rows={4}
-                        className="w-full px-4 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-smooth resize-none"
+                        className="w-full px-4 py-2 border border-input rounded-md bg-muted text-muted-foreground cursor-not-allowed transition-smooth resize-none"
                       />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Este campo pertenece al catálogo del requisito y no se edita desde la evaluación.
+                      </p>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1028,21 +1341,16 @@ export default function ItemDetailModal({
                         </label>
                         <select
                           value={editedItem?.status || ''}
-                          onChange={(e) => handleChange('status', e.target.value)}
-                          className="w-full px-4 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-smooth"
+                          disabled
+                          className="w-full px-4 py-2 border border-input rounded-md bg-muted text-muted-foreground cursor-not-allowed"
                         >
-                          <option value="Cumplido">Cumplido</option>
-                          <option value="En trámite">En trámite</option>
-                          <option value="Incumplido">Incumplido</option>
-                          <option value="No aplica">No aplica</option>
-                          <option value="No ha sucedido">No ha sucedido</option>
-                          <option value="Terceros-Incumplido">
-                            Terceros-Incumplido
-                          </option>
-                          <option value="Terceros-Cumplido">
-                            Terceros-Cumplido
+                          <option value={editedItem?.status || ''}>
+                            {editedItem?.status || 'Sin estado'}
                           </option>
                         </select>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          El estado se modifica desde el flujo específico de actualización de estado.
+                        </p>
                       </div>
 
                       <div>
@@ -1056,6 +1364,7 @@ export default function ItemDetailModal({
                             handleChange('responsible', e.target.value)
                           }
                           className="w-full px-4 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-smooth"
+                          placeholder="Ej: Área de Operaciones"
                         />
                       </div>
                     </div>
@@ -1068,19 +1377,22 @@ export default function ItemDetailModal({
                         <input
                           type="date"
                           value={
-                            editedItem?.plannedDate
-                              .split('/')
-                              .reverse()
-                              .join('-') || ''
+                            editedItem?.fechaPlanificada ||
+                            formatDateForInput(editedItem?.plannedDate)
                           }
                           onChange={(e) => {
-                            const date = new Date(e.target.value);
-                            const formatted = date.toLocaleDateString('es-ES', {
-                              day: '2-digit',
-                              month: '2-digit',
-                              year: 'numeric',
+                            const rawDate = e.target.value;
+                            setEditedItem((prev) => {
+                              if (!prev) return prev;
+
+                              return {
+                                ...prev,
+                                fechaPlanificada: rawDate,
+                                plannedDate: rawDate
+                                  ? formatApiDate(rawDate)
+                                  : '—',
+                              };
                             });
-                            handleChange('plannedDate', formatted);
                           }}
                           className="w-full px-4 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-smooth"
                         />
@@ -1091,19 +1403,48 @@ export default function ItemDetailModal({
                           Periodicidad <span className="text-error">*</span>
                         </label>
                         <select
-                          value={editedItem?.periodicity || ''}
-                          onChange={(e) =>
-                            handleChange('periodicity', e.target.value)
-                          }
-                          className="w-full px-4 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-smooth"
+                          value={editedItem?.idPeriocidad ? String(editedItem.idPeriocidad) : ''}
+                          onChange={(e) => {
+                            const selectedId = e.target.value
+                              ? Number(e.target.value)
+                              : null;
+
+                            const selectedOption = periodicityOptions.find(
+                              (option) => option.id === selectedId
+                            );
+
+                            setEditedItem((prev) => {
+                              if (!prev) return prev;
+
+                              return {
+                                ...prev,
+                                idPeriocidad: selectedId,
+                                periodicity:
+                                  selectedOption?.name || prev.periodicity || '—',
+                              };
+                            });
+                          }}
+                          disabled={loadingPeriodicities}
+                          className="w-full px-4 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-smooth disabled:bg-muted disabled:text-muted-foreground"
                         >
-                          <option value="Mensual">Mensual</option>
-                          <option value="Trimestral">Trimestral</option>
-                          <option value="Semestral">Semestral</option>
-                          <option value="Anual">Anual</option>
-                          <option value="Bianual">Bianual</option>
-                          <option value="Única vez">Única vez</option>
+                          <option value="">
+                            {loadingPeriodicities
+                              ? 'Cargando periodicidades...'
+                              : 'Seleccione periodicidad'}
+                          </option>
+
+                          {periodicityOptions.map((option) => (
+                            <option key={option.id} value={String(option.id)}>
+                              {option.name}
+                            </option>
+                          ))}
                         </select>
+
+                        {periodicitiesError && (
+                          <p className="text-xs text-error mt-1">
+                            {periodicitiesError}
+                          </p>
+                        )}
                       </div>
                     </div>
 
@@ -1126,35 +1467,43 @@ export default function ItemDetailModal({
                         <label className="block text-sm font-medium text-muted-foreground mb-2">
                           Estado
                         </label>
-                        <StatusBadge status={item.status} />
+                        <StatusBadge status={displayItem.status} />
                       </div>
 
                       <div>
                         <label className="block text-sm font-medium text-muted-foreground mb-2">
                           Responsable
                         </label>
-                        <p className="text-foreground">{item.responsible}</p>
+                        <p className="text-foreground">
+                          {displayItem.responsible || '—'}
+                        </p>
                       </div>
 
                       <div>
                         <label className="block text-sm font-medium text-muted-foreground mb-2">
                           Fecha Planificada
                         </label>
-                        <p className="text-foreground">{item.plannedDate}</p>
+                        <p className="text-foreground">
+                          {displayItem.plannedDate || '—'}
+                        </p>
                       </div>
 
                       <div>
                         <label className="block text-sm font-medium text-muted-foreground mb-2">
                           Periodicidad
                         </label>
-                        <p className="text-foreground">{item.periodicity}</p>
+                        <p className="text-foreground">
+                          {displayItem.periodicity || '—'}
+                        </p>
                       </div>
 
                       <div>
                         <label className="block text-sm font-medium text-muted-foreground mb-2">
                           Última Actualización
                         </label>
-                        <p className="text-foreground">{item.lastUpdate}</p>
+                        <p className="text-foreground">
+                          {displayItem.lastUpdate || '—'}
+                        </p>
                       </div>
                     </div>
 
@@ -1163,7 +1512,7 @@ export default function ItemDetailModal({
                         Descripción
                       </label>
                       <p className="text-foreground leading-relaxed">
-                        {item.description}
+                        {displayItem.description}
                       </p>
                     </div>
                   </>
@@ -1730,16 +2079,18 @@ export default function ItemDetailModal({
             <div className="px-6 py-4 border-t border-border bg-muted/30 flex items-center justify-end gap-3">
               <button
                 onClick={handleCancel}
-                className="px-6 py-2 text-sm font-medium text-foreground border border-input rounded-md hover:bg-muted transition-smooth"
+                disabled={savingInfo}
+                className="px-6 py-2 text-sm font-medium text-foreground border border-input rounded-md hover:bg-muted transition-smooth disabled:opacity-50"
               >
                 Cancelar
               </button>
 
               <button
                 onClick={handleSave}
-                className="px-6 py-2 text-sm font-medium text-primary-foreground bg-primary rounded-md hover:bg-primary/90 transition-smooth shadow-elevation-1"
+                disabled={savingInfo || loadingInfo}
+                className="px-6 py-2 text-sm font-medium text-primary-foreground bg-primary rounded-md hover:bg-primary/90 transition-smooth shadow-elevation-1 disabled:opacity-50"
               >
-                Guardar Cambios
+                {savingInfo ? 'Guardando...' : 'Guardar Cambios'}
               </button>
             </div>
           )}
