@@ -16,7 +16,10 @@ interface BreadcrumbNavigationProps {
   className?: string;
 }
 
-const BreadcrumbNavigation = ({ customSegments, className = '' }: BreadcrumbNavigationProps) => {
+const BreadcrumbNavigation = ({
+  customSegments,
+  className = '',
+}: BreadcrumbNavigationProps) => {
   const pathname = usePathname();
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -29,20 +32,24 @@ const BreadcrumbNavigation = ({ customSegments, className = '' }: BreadcrumbNavi
     const pathParts = pathname.split('/').filter(Boolean);
 
     const routeMap: Record<string, string> = {
-      'login': 'Iniciar Sesión',
+      login: 'Iniciar Sesión',
       'countries-selection': 'Países',
       'company-selection': 'Proyectos',
-      'project-dashboard': 'Panel de Proyecto',
+      'company-dashboard': 'Panel de Cumplimiento Legal',
       'country-management': 'Gestión de Países',
       'project-maintenance': 'Mantenimiento de Proyectos',
       'requirements-maintenance': 'Mantenimiento de Requisitos',
+      'user-management': 'Mantenimiento de Usuarios',
+      'roles-management': 'Mantenimiento de Roles',
+      'permissions-management': 'Mantenimiento de Permisos',
     };
 
     let currentPath = '';
+
     pathParts.forEach((part, index) => {
       currentPath += `/${part}`;
       const isLast = index === pathParts.length - 1;
-      
+
       segments.push({
         label: routeMap[part] || part.charAt(0).toUpperCase() + part.slice(1),
         href: currentPath,
@@ -68,22 +75,23 @@ const BreadcrumbNavigation = ({ customSegments, className = '' }: BreadcrumbNavi
   }
 
   return (
-    <nav 
-      aria-label="Breadcrumb" 
-      className={`flex items-center gap-2 py-4 ${className}`}
+    <nav
+      aria-label="Breadcrumb"
+      className={`relative flex items-center gap-2 py-4 ${className}`}
     >
       <div className="hidden md:flex items-center gap-2 flex-wrap">
         {breadcrumbs.map((segment, index) => (
           <div key={segment.href} className="flex items-center gap-2">
             {index > 0 && (
-              <Icon 
-                name="ChevronRightIcon" 
-                size={16} 
+              <Icon
+                name="ChevronRightIcon"
+                size={16}
                 className="text-muted-foreground"
               />
             )}
+
             {segment.isActive ? (
-              <span 
+              <span
                 className="text-sm font-medium text-foreground font-caption"
                 aria-current="page"
               >
@@ -107,21 +115,22 @@ const BreadcrumbNavigation = ({ customSegments, className = '' }: BreadcrumbNavi
           className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary transition-smooth font-caption"
           aria-expanded={isExpanded}
           aria-label="Expandir navegación"
+          type="button"
         >
-          <Icon 
-            name="HomeIcon" 
-            size={20} 
+          <Icon
+            name="HomeIcon"
+            size={20}
             className="text-muted-foreground"
           />
           {breadcrumbs.length > 1 && (
-            <Icon 
-              name={isExpanded ? "ChevronUpIcon" : "ChevronDownIcon"} 
-              size={16} 
+            <Icon
+              name={isExpanded ? 'ChevronUpIcon' : 'ChevronDownIcon'}
+              size={16}
               className="text-muted-foreground"
             />
           )}
         </button>
-        
+
         <span className="text-sm font-medium text-foreground font-caption flex-1 truncate">
           {breadcrumbs[breadcrumbs.length - 1].label}
         </span>

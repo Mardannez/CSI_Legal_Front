@@ -83,16 +83,17 @@ export default function CountriesSelectionInteractive() {
   //    - correo o usuario
   //    - rol principal visible
   // ==========================================================
-  const currentUser = useMemo(() => {
-    const firstEmpresaRole = session?.empresas?.[0]?.roles?.join(', ') || 'Usuario';
+const currentUser = useMemo(() => {
+  const firstEmpresaRole = session?.empresas?.[0]?.roles?.join(', ') || 'Usuario';
 
-    return {
-      name: session?.user.nombreCompleto || session?.user.usuario || 'Usuario',
-      email: session?.user.correo || session?.user.usuario || '',
-      role: session?.isGlobalAdmin ? 'SUPER_ADMIN' : firstEmpresaRole,
-      avatar: '',
-    };
-  }, [session]);
+  return {
+    name: session?.user.nombreCompleto || session?.user.usuario || 'Usuario',
+    email: session?.user.correo || session?.user.usuario || '',
+    role: session?.isGlobalAdmin ? 'SUPER_ADMIN' : firstEmpresaRole,
+    avatar: '',
+    isGlobalAdmin: !!session?.isGlobalAdmin, // <-- NUEVO
+  };
+}, [session]);
 
   // ==========================================================
   // 6) Cargar países desde la API
