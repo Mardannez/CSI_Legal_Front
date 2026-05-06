@@ -134,6 +134,7 @@ export default function CompanyDashboardInteractive() {
         ? 'SUPER_ADMIN'
         : currentEmpresa?.roles?.join(', ') || 'Usuario',
       avatar: '',
+      isGlobalAdmin: !!session?.isGlobalAdmin, // <-- NUEVO
     }),
     [session, currentEmpresa]
   );

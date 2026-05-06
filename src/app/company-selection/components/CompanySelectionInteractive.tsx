@@ -113,6 +113,7 @@ export default function CompanySelectionInteractive() {
       email: session?.user.correo || session?.user.usuario || '',
       role: session?.isGlobalAdmin ? 'SUPER_ADMIN' : firstEmpresaRole,
       avatar: '',
+      isGlobalAdmin: !!session?.isGlobalAdmin, // <-- NUEVO
     };
   }, [session]);
 
