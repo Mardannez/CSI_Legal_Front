@@ -36,6 +36,12 @@ interface ItemDetailModalProps {
   item: ComplianceItem | null;
   onClose: () => void;
   onSave: (updatedItem: ComplianceItem) => void;
+    // ==========================================================
+  // PERMISOS UI
+  // Controla si el usuario puede editar información del detalle.
+  // EMPRESA_LECTOR debe venir en false desde el dashboard.
+  // ==========================================================
+  canEdit?: boolean;
 }
 
 type TabType =
@@ -231,6 +237,7 @@ export default function ItemDetailModal({
   item,
   onClose,
   onSave,
+  canEdit = false,
 }: ItemDetailModalProps) {
   const [isHydrated, setIsHydrated] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('info');
@@ -1012,6 +1019,14 @@ export default function ItemDetailModal({
     loadAvailableResponsibles(item.id);
   }, [activeTab, isOpen, item]);
 
+  //--UseEffect para controlar si usuarios de empresas con solo lectura no puedan ver el boton de editar ---//
+    useEffect(() => {
+      if (!canEdit) {
+        setIsEditMode(false);
+      }
+    }, [canEdit]);
+
+    //-- FIN UseEffect para controlar si usuarios de empresas con solo lectura no puedan ver el boton de editar ---//
   const handleOpenResponsibleModal = async () => {
     if (!item?.id) return;
 
@@ -1244,15 +1259,15 @@ export default function ItemDetailModal({
             </div>
 
             <div className="flex items-center gap-2">
-              {!isEditMode && (
-                <button
-                  onClick={() => setIsEditMode(true)}
-                  className="px-4 py-2 text-sm font-medium text-primary border border-primary rounded-md hover:bg-primary/10 transition-smooth flex items-center gap-2"
-                >
-                  <Icon name="PencilIcon" size={16} />
-                  Editar
-                </button>
-              )}
+            {canEdit && !isEditMode && (
+              <button
+                onClick={() => setIsEditMode(true)}
+                className="px-4 py-2 text-sm font-medium text-primary border border-primary rounded-md hover:bg-primary/10 transition-smooth flex items-center gap-2"
+              >
+                <Icon name="PencilIcon" size={16} />
+                Editar
+              </button>
+            )}
 
               <button
                 onClick={onClose}
@@ -2075,7 +2090,7 @@ export default function ItemDetailModal({
             )}
           </div>
 
-          {isEditMode && (
+          {canEdit && isEditMode && (
             <div className="px-6 py-4 border-t border-border bg-muted/30 flex items-center justify-end gap-3">
               <button
                 onClick={handleCancel}

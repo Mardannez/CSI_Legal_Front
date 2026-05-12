@@ -218,6 +218,14 @@ const canViewAdministration = !!safeUser.isGlobalAdmin || isSuperAdminByRole;
               <Icon name="KeyIcon" size={18} className="text-muted-foreground" />
               <span>Mantenimiento de Permisos</span>
             </Link>
+            <Link
+              href="/license-management"
+              onClick={() => setIsOpen(false)}
+              className="flex items-center gap-3 px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-smooth"
+            >
+              <Icon name="BriefcaseIcon" size={18} className="text-muted-foreground" />
+              <span>Mantenimiento de Licencias</span>
+            </Link>
           </>
         )}
           </div>
