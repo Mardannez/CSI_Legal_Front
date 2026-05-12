@@ -145,17 +145,23 @@ export default function CompanyDashboardInteractive() {
   //    - lector: solo ve
   //    - editor/admin: puede operar
   // ==========================================================
-  const canStartEvaluation = selectedCompanyId
-    ? hasEmpresaPermission(selectedCompanyId, 'EVALUACIONES_EDITAR')
-    : false;
+  const canStartEvaluation =
+    !!session?.isGlobalAdmin ||
+    (selectedCompanyId
+      ? hasEmpresaPermission(selectedCompanyId, 'EVALUACIONES_EDITAR')
+      : false);
 
-  const canCreateNewElement = selectedCompanyId
-    ? hasEmpresaPermission(selectedCompanyId, 'EVALUACIONES_EDITAR')
-    : false;
+  const canCreateNewElement =
+    !!session?.isGlobalAdmin ||
+    (selectedCompanyId
+      ? hasEmpresaPermission(selectedCompanyId, 'EVALUACIONES_EDITAR')
+      : false);
 
-  const canEditStatus = selectedCompanyId
-    ? hasEmpresaPermission(selectedCompanyId, 'REQUISITOS_ESTADO_EDITAR')
-    : false;
+  const canEditStatus =
+    !!session?.isGlobalAdmin ||
+    (selectedCompanyId
+      ? hasEmpresaPermission(selectedCompanyId, 'REQUISITOS_ESTADO_EDITAR')
+      : false);
 
   // ==========================================================
   // GUARDAR CAMBIOS EN EVALUACIÓN
@@ -163,9 +169,33 @@ export default function CompanyDashboardInteractive() {
   // Se usa EVALUACIONES_EDITAR porque este botón actualiza
   // EvaluacionEncabezado y no debe verlo el usuario Empresa_Lector.
   // ==========================================================
-  const canSaveEvaluationChanges = selectedCompanyId
-    ? hasEmpresaPermission(selectedCompanyId, 'EVALUACIONES_EDITAR')
-    : false;
+  const canSaveEvaluationChanges =
+    !!session?.isGlobalAdmin ||
+    (selectedCompanyId
+      ? hasEmpresaPermission(selectedCompanyId, 'EVALUACIONES_EDITAR')
+      : false);
+
+  // ==========================================================
+  // PERMISOS UI - EDITAR DETALLE DE EVALUACIÓN -- NUEVO 07-05-2026 -- DANIEL MARTINEZ.
+  // Este boolean se pasa al ItemDetailModal como prop canEdit.
+  //
+  // IMPORTANTE:
+  // - Se declara aquí arriba, antes de cualquier return condicional.
+  // - No se declara después del if (!hasEvaluation), porque eso cambia
+  //   el orden de Hooks entre renders y React muestra el error:
+  //   "React has detected a change in the order of Hooks".
+  //
+  // Regla actual:
+  // - SUPER_ADMIN: puede editar.
+  // - EMPRESA_ADMIN / EMPRESA_EDITOR: deben tener EVALUACIONES_EDITAR.
+  // - EMPRESA_LECTOR: no debe tener EVALUACIONES_EDITAR, por eso no verá
+  //   el botón Editar dentro del modal.
+  // ==========================================================
+  const canEditEvaluationDetail =
+    !!session?.isGlobalAdmin ||
+    (selectedCompanyId
+      ? hasEmpresaPermission(selectedCompanyId, 'EVALUACIONES_EDITAR')
+      : false);
 
   // ==========================================================
   // 7) Estado base / auth
@@ -1089,6 +1119,7 @@ export default function CompanyDashboardInteractive() {
           // para refrescar tabla, KPIs y cualquier dato derivado.
           await loadDashboard();
         }}
+        canEdit={canEditEvaluationDetail}
       />
     </div>
   );

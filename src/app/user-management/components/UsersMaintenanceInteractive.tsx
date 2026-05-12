@@ -13,10 +13,37 @@ const API_URL =
 
 type EstadoValue = 0 | 1;
 
+interface EmpresaLicenciaInfo {
+  id: number | null;
+  idEmpresa: number | null;
+  fechaInicio: string | null;
+  fechaFin: string | null;
+  estado: string | null;
+  estadoCalculado:
+    | 'ACTIVA'
+    | 'VENCIDA'
+    | 'SUSPENDIDA'
+    | 'CANCELADA'
+    | 'PENDIENTE'
+    | 'SIN_LICENCIA'
+    | string;
+  tipoLicencia: string | null;
+  maxUsuarios: number | null;
+  diasRestantes: number | null;
+  puedeAcceder: boolean;
+}
+
 interface EmpresaCatalogo {
   id: number;
   Nombre: string;
   Estado: number;
+
+  // ==========================================================
+  // LICENCIAS DE EMPRESA
+  // Este campo viene desde usuarios.routes.js dentro de Empresa.
+  // Permite mostrar si el usuario podrá entrar según la empresa.
+  // ==========================================================
+  Licencia?: EmpresaLicenciaInfo | null;
 }
 
 interface Rol {
@@ -152,6 +179,52 @@ function estadoBadgeClass(value?: number) {
   return Number(value) === 1
     ? 'bg-success/10 text-success border-success/20'
     : 'bg-error/10 text-error border-error/20';
+}
+
+function licenciaLabel(licencia?: EmpresaLicenciaInfo | null) {
+  const estado = licencia?.estadoCalculado || 'SIN_LICENCIA';
+
+  switch (estado) {
+    case 'ACTIVA':
+      return 'Licencia activa';
+    case 'VENCIDA':
+      return 'Licencia vencida';
+    case 'SUSPENDIDA':
+      return 'Licencia suspendida';
+    case 'CANCELADA':
+      return 'Licencia cancelada';
+    case 'PENDIENTE':
+      return 'Licencia pendiente';
+    case 'SIN_LICENCIA':
+    default:
+      return 'Sin licencia';
+  }
+}
+
+function licenciaBadgeClass(licencia?: EmpresaLicenciaInfo | null) {
+  const estado = licencia?.estadoCalculado || 'SIN_LICENCIA';
+
+  if (estado === 'ACTIVA') {
+    return 'bg-success/10 text-success border-success/20';
+  }
+
+  if (estado === 'PENDIENTE') {
+    return 'bg-warning/10 text-warning border-warning/20';
+  }
+
+  return 'bg-error/10 text-error border-error/20';
+}
+
+function licenciaDetalleTexto(licencia?: EmpresaLicenciaInfo | null) {
+  if (!licencia || licencia.estadoCalculado === 'SIN_LICENCIA') {
+    return 'No hay licencia registrada';
+  }
+
+  if (licencia.estadoCalculado === 'ACTIVA') {
+    return `Vence: ${formatDate(licencia.fechaFin)} • ${licencia.diasRestantes ?? 0} día(s) restantes`;
+  }
+
+  return `Venció / finaliza: ${formatDate(licencia.fechaFin)}`;
 }
 
 export default function UsersMaintenanceInteractive() {
@@ -1006,15 +1079,29 @@ const currentUser = useMemo(() => {
                           {(user.EmpresasAsignadas || []).length === 0 ? (
                             <span className="text-sm text-muted-foreground">—</span>
                           ) : (
-                            user.EmpresasAsignadas?.map((empresa) => (
-                              <span
-                                key={empresa.IdUsuarioEmpresa}
-                                className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium border bg-muted text-foreground"
-                              >
-                                {empresa.Empresa?.Nombre || `Empresa #${empresa.IdEmpresa}`}
-                                {empresa.EsPrincipal ? ' • Principal' : ''}
-                              </span>
-                            ))
+                                user.EmpresasAsignadas?.map((empresa) => {
+                                const licencia = empresa.Empresa?.Licencia;
+
+                                return (
+                                  <span
+                                    key={empresa.IdUsuarioEmpresa}
+                                    className="inline-flex flex-col gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium border bg-muted text-foreground"
+                                  >
+                                    <span>
+                                      {empresa.Empresa?.Nombre || `Empresa #${empresa.IdEmpresa}`}
+                                      {empresa.EsPrincipal ? ' • Principal' : ''}
+                                    </span>
+
+                                    <span
+                                      className={`inline-flex w-fit px-2 py-0.5 rounded-full text-[11px] font-medium border ${licenciaBadgeClass(
+                                        licencia
+                                      )}`}
+                                    >
+                                      {licenciaLabel(licencia)}
+                                    </span>
+                                  </span>
+                                );
+                              })
                           )}
                         </div>
                       </td>
@@ -1351,6 +1438,9 @@ const currentUser = useMemo(() => {
                                 Estado
                               </th>
                               <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">
+                                Licencia
+                              </th>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">
                                 Acciones
                               </th>
                             </tr>
@@ -1386,6 +1476,21 @@ const currentUser = useMemo(() => {
                                 </td>
                                 <td className="px-4 py-3 text-sm text-foreground">
                                   {estadoLabel(row.Estado)}
+                                </td>
+                                <td className="px-4 py-3 align-top">
+                                  <div className="space-y-1">
+                                    <span
+                                      className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium border ${licenciaBadgeClass(
+                                        row.Empresa?.Licencia
+                                      )}`}
+                                    >
+                                      {licenciaLabel(row.Empresa?.Licencia)}
+                                    </span>
+
+                                    <p className="text-xs text-muted-foreground">
+                                      {licenciaDetalleTexto(row.Empresa?.Licencia)}
+                                    </p>
+                                  </div>
                                 </td>
                                 <td className="px-4 py-3">
                                   <div className="flex items-center gap-2">
