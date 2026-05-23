@@ -69,6 +69,18 @@ function formatDateES(value: unknown) {
   });
 }
 
+function formatDateInput(value: unknown) {
+  if (!value) return '';
+  const d = new Date(String(value));
+  if (Number.isNaN(d.getTime())) return '';
+
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
 export default function CompanyDashboardInteractive() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -121,6 +133,18 @@ export default function CompanyDashboardInteractive() {
       ) || null
     );
   }, [session, selectedCompanyId]);
+
+  const canDownloadFiles = useMemo(() => {
+    if (!session) return false;
+    if (session.isGlobalAdmin) return true;
+
+    const roles = [
+      ...(session.rolesGlobales || []),
+      ...(currentEmpresa?.roles || []),
+    ].map((role) => String(role).toUpperCase());
+
+    return roles.includes('SUPER_ADMIN') || roles.includes('ADMIN_GLOBAL');
+  }, [session, currentEmpresa]);
 
   // ==========================================================
   // 5) Armamos el objeto visual del usuario para UserContextMenu
@@ -215,19 +239,43 @@ export default function CompanyDashboardInteractive() {
 
   // ==========================================================
   // GUARDAR CAMBIOS EN EVALUACIÓN
-  // Estado visual del botón que guarda el resumen del encabezado.
-  // Cuando se presiona, el backend debe actualizar:
-  // - EvaluacionEncabezado.UltimaVerificacion
-  // - EvaluacionEncabezado.UltimoHistorico
-  // - EvaluacionEncabezado.ProximoEvento
+  // Estado visual del botón que guarda solo UltimaVerificacion.
   // ==========================================================
   const [savingEvaluationChanges, setSavingEvaluationChanges] = useState(false);
+  const [nextEventDate, setNextEventDate] = useState('');
+  const [savingNextEvent, setSavingNextEvent] = useState(false);
+  const [nextEventError, setNextEventError] = useState<string | null>(null);
 
   // ==========================================================
   // 9) Catálogo de estados
   // ==========================================================
   const [statusOptions, setStatusOptions] = useState<StatusOption[]>([]);
   const [loadingStates, setLoadingStates] = useState(false);
+
+  const buildChartDataFromItems = (nextItems: DashboardItem[]) => {
+    const labels =
+      statusOptions.length > 0
+        ? statusOptions.map((option) => option.label)
+        : chartData.map((slice) => slice.name);
+
+    const counts = new Map<string, number>();
+    labels.forEach((label) => counts.set(label, 0));
+
+    nextItems.forEach((nextItem) => {
+      const label =
+        statusOptions.find((option) => option.id === nextItem.estadoId)
+          ?.label ||
+        nextItem.status ||
+        'Desconocido';
+
+      counts.set(label, (counts.get(label) || 0) + 1);
+    });
+
+    return Array.from(counts.entries()).map(([name, value]) => ({
+      name,
+      value,
+    }));
+  };
 
   // ==========================================================
   // 10) Estado para iniciar evaluación
@@ -510,6 +558,12 @@ export default function CompanyDashboardInteractive() {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
+        body: JSON.stringify({
+          campos: ['UltimaVerificacion'],
+          actualizarUltimaVerificacion: true,
+          actualizarUltimoHistorico: false,
+          actualizarProximoEvento: false,
+        }),
       });
 
       const json = await res.json().catch(() => ({}));
@@ -525,21 +579,71 @@ export default function CompanyDashboardInteractive() {
         );
       }
 
-      // Actualizamos el encabezado local para que los 3 KPI cambien
-      // inmediatamente sin obligar a recargar toda la página.
-      if (json?.Evaluacion) {
-        setEvaluacion(json.Evaluacion);
+      if (json?.Evaluacion?.UltimaVerificacion) {
+        setEvaluacion((prev: any) => ({
+          ...prev,
+          UltimaVerificacion: json.Evaluacion.UltimaVerificacion,
+        }));
       }
-
-      // También recargamos el dashboard para mantener sincronizados:
-      // - KPIs
-      // - tabla
-      // - gráfico
-      await loadDashboard();
     } catch (e: any) {
       setApiError(e?.message || 'Error guardando cambios de evaluación');
     } finally {
       setSavingEvaluationChanges(false);
+    }
+  };
+
+  const handleSaveNextEvent = async () => {
+    if (!canSaveEvaluationChanges) return;
+
+    if (!evaluacion?.id) {
+      setNextEventError('No se encontro la evaluacion activa.');
+      return;
+    }
+
+    const token = localStorage.getItem('CSI_Legal_token');
+    const url = `${API_URL}/api/evaluaciones/${evaluacion.id}/proximo-evento`;
+
+    setSavingNextEvent(true);
+    setNextEventError(null);
+
+    try {
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          ProximoEvento: nextEventDate || null,
+          proximoEvento: nextEventDate || null,
+        }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+
+      if (res.status === 401) {
+        logout();
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error(json?.message || 'No se pudo actualizar el proximo evento');
+      }
+
+      const savedNextEvent =
+        json?.Evaluacion?.ProximoEvento ??
+        json?.ProximoEvento ??
+        nextEventDate;
+
+      setEvaluacion((prev: any) => ({
+        ...prev,
+        ProximoEvento: savedNextEvent,
+      }));
+      setNextEventDate(formatDateInput(savedNextEvent));
+    } catch (e: any) {
+      setNextEventError(e?.message || 'Error actualizando el proximo evento');
+    } finally {
+      setSavingNextEvent(false);
     }
   };
 
@@ -549,20 +653,28 @@ export default function CompanyDashboardInteractive() {
   //    en UI para que el lector ni siquiera vea la acción.
   // ==========================================================
   const handleStatusChange = async (
-    detalleId: number,
+    item: { id: number; evaluacionId?: number; status: string },
     newEstadoId: number
   ) => {
     if (!canEditStatus) return;
 
+    const detalleId = item.id;
+    const newStatusLabel =
+      statusOptions.find((option) => option.id === newEstadoId)?.label ||
+      item.status;
     const token = localStorage.getItem('CSI_Legal_token');
     const url = `${API_URL}/api/evaluaciones/detalle/${detalleId}/estado`;
 
     const prev = items;
-    setItems((curr) =>
-      curr.map((i) =>
-        i.id === detalleId ? { ...i, estadoId: newEstadoId } : i
-      )
+    const prevChart = chartData;
+    const nextItems = items.map((i) =>
+        i.id === detalleId
+          ? { ...i, estadoId: newEstadoId, status: newStatusLabel }
+          : i
     );
+
+    setItems(nextItems);
+    setChartData(buildChartDataFromItems(nextItems));
 
     try {
       const res = await fetch(url, {
@@ -571,7 +683,15 @@ export default function CompanyDashboardInteractive() {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ estadoId: newEstadoId }),
+        body: JSON.stringify({
+          estadoId: newEstadoId,
+          idEstadoRequisito: newEstadoId,
+          IdEstadoRequisito: newEstadoId,
+          evaluacionId: item.evaluacionId,
+          IdEvaluacionEncabezado: item.evaluacionId,
+          companyId: selectedCompanyId,
+          idEmpresa: selectedCompanyId,
+        }),
       });
 
       const json = await res.json().catch(() => ({}));
@@ -584,12 +704,13 @@ export default function CompanyDashboardInteractive() {
       if (!res.ok) {
         throw new Error(json?.message || 'No se pudo actualizar el estado');
       }
-
-      await loadDashboard();
-    } catch (e) {
-      console.error('[CompanyDashboard] update estado error:', e);
+    } catch (e: any) {
+      console.warn(
+        '[CompanyDashboard] update estado error:',
+        e?.message || e
+      );
       setItems(prev);
-      await loadDashboard();
+      setChartData(prevChart);
     }
   };
 
@@ -679,6 +800,11 @@ export default function CompanyDashboardInteractive() {
     loadDashboard();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isHydrated, authChecked, selectedCompany]);
+
+  useEffect(() => {
+    setNextEventDate(formatDateInput(evaluacion?.ProximoEvento));
+    setNextEventError(null);
+  }, [evaluacion?.ProximoEvento]);
 
   // ==========================================================
   // 22) Filtros de tabla
@@ -934,7 +1060,6 @@ export default function CompanyDashboardInteractive() {
   // 26) Dashboard real con evaluación
   // ==========================================================
   const kpiUltimaVerificacion = formatDateES(evaluacion?.UltimaVerificacion);
-  const kpiUltimoHistorico = formatDateES(evaluacion?.UltimoHistorico);
   const kpiProximoEvento = formatDateES(evaluacion?.ProximoEvento);
 
   return (
@@ -977,17 +1102,7 @@ export default function CompanyDashboardInteractive() {
               </p>
             </div>
 
-            {/* ======================================================
-                GUARDAR CAMBIOS EN EVALUACIÓN
-                Botón visible únicamente para usuario con permiso
-                EVALUACIONES_EDITAR. No debe mostrarse a Empresa_Lector.
-
-                Este botón no guarda un requisito individual. Su objetivo
-                es consolidar/actualizar los campos del encabezado:
-                - Última Verificación
-                - Último Registro Histórico
-                - Próximo Evento
-               ====================================================== */}
+            {/* Guarda solo UltimaVerificacion en EvaluacionEncabezado. */}
             {canSaveEvaluationChanges ? (
               <button
                 onClick={handleSaveEvaluationChanges}
@@ -997,8 +1112,8 @@ export default function CompanyDashboardInteractive() {
                 <Icon name="ArrowPathIcon" size={18} />
                 <span>
                   {savingEvaluationChanges
-                    ? 'Guardando evaluación...'
-                    : 'Guardar Cambios en Evaluación'}
+                    ? 'Guardando auditoria...'
+                    : 'Guardar Ultima Auditoria'}
                 </span>
               </button>
             ) : null}
@@ -1011,25 +1126,58 @@ export default function CompanyDashboardInteractive() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <KPICard
-            title="Última Verificación"
+            title="Ultima Auditoria"
             date={kpiUltimaVerificacion}
             icon="📋"
             variant="primary"
           />
-          <KPICard
-            title="Último Registro Histórico"
-            date={kpiUltimoHistorico}
-            icon="📊"
-            variant="secondary"
-          />
-          <KPICard
-            title="Próximo Evento"
-            date={kpiProximoEvento}
-            icon="📅"
-            variant="accent"
-          />
+          <div className="bg-card rounded-lg border border-border p-6 shadow-elevation-1 hover:shadow-elevation-2 transition-smooth">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-muted-foreground font-caption mb-2">
+                  Proximo Auditoria
+                </p>
+
+                {canSaveEvaluationChanges ? (
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                    <input
+                      type="date"
+                      value={nextEventDate}
+                      onChange={(event) => {
+                        setNextEventDate(event.target.value);
+                        setNextEventError(null);
+                      }}
+                      className="w-full sm:w-48 px-3 py-2 border border-input rounded-md bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={handleSaveNextEvent}
+                      disabled={savingNextEvent || !evaluacion?.id}
+                      className="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-primary-foreground bg-primary rounded-md hover:bg-primary/90 transition-smooth disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Icon name="CheckIcon" size={16} />
+                      <span>{savingNextEvent ? 'Guardando...' : 'Guardar'}</span>
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-2xl font-semibold text-foreground">
+                    {kpiProximoEvento}
+                  </p>
+                )}
+
+                {nextEventError ? (
+                  <p className="text-xs text-error mt-2">{nextEventError}</p>
+                ) : null}
+              </div>
+
+              <div className="w-12 h-12 rounded-lg flex items-center justify-center border bg-accent/10 text-accent border-accent/20">
+                <Icon name="CalendarIcon" size={24} />
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="mb-8">
@@ -1120,6 +1268,7 @@ export default function CompanyDashboardInteractive() {
           await loadDashboard();
         }}
         canEdit={canEditEvaluationDetail}
+        canDownloadFiles={canDownloadFiles}
       />
     </div>
   );

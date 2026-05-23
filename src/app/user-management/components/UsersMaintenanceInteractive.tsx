@@ -181,6 +181,22 @@ function estadoBadgeClass(value?: number) {
     : 'bg-error/10 text-error border-error/20';
 }
 
+function validatePasswordRules(password: string) {
+  if (!/^[A-Z]/.test(password)) {
+    return 'La contraseña debe iniciar con una letra mayúscula';
+  }
+
+  if (!/\d/.test(password)) {
+    return 'La contraseña debe incluir al menos 1 número';
+  }
+
+  if (!/[^A-Za-z0-9]/.test(password)) {
+    return 'La contraseña debe incluir al menos 1 carácter especial';
+  }
+
+  return null;
+}
+
 function licenciaLabel(licencia?: EmpresaLicenciaInfo | null) {
   const estado = licencia?.estadoCalculado || 'SIN_LICENCIA';
 
@@ -271,6 +287,7 @@ export default function UsersMaintenanceInteractive() {
   const [showUserModal, setShowUserModal] = useState(false);
   const [savingUser, setSavingUser] = useState(false);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const [userForm, setUserForm] = useState({
     usuario: '',
@@ -436,6 +453,7 @@ const currentUser = useMemo(() => {
 
   const openCreateModal = () => {
     setEditingUserId(null);
+    setShowPassword(false);
     setUserForm({
       usuario: '',
       password: '',
@@ -461,6 +479,7 @@ const currentUser = useMemo(() => {
         estado: Number(json?.Usuario?.Estado || 1) as EstadoValue,
       });
 
+      setShowPassword(false);
       setShowUserModal(true);
     } catch (error: any) {
       alert(error?.message || 'Error cargando detalle del usuario');
@@ -470,6 +489,7 @@ const currentUser = useMemo(() => {
   const closeUserModal = () => {
     setShowUserModal(false);
     setEditingUserId(null);
+    setShowPassword(false);
   };
 
   const saveUser = async () => {
@@ -486,6 +506,15 @@ const currentUser = useMemo(() => {
     if (!editingUserId && !userForm.password.trim()) {
       alert('Ingrese la contraseña');
       return;
+    }
+
+    const password = userForm.password.trim();
+    if (password) {
+      const passwordError = validatePasswordRules(password);
+      if (passwordError) {
+        alert(passwordError);
+        return;
+      }
     }
 
     setSavingUser(true);
@@ -1287,17 +1316,36 @@ const currentUser = useMemo(() => {
                 <label className="block text-sm font-medium text-foreground mb-2">
                   {editingUserId ? 'Nueva Contraseña (opcional)' : 'Contraseña *'}
                 </label>
-                <input
-                  type="password"
-                  value={userForm.password}
-                  onChange={(e) =>
-                    setUserForm((prev) => ({
-                      ...prev,
-                      password: e.target.value,
-                    }))
-                  }
-                  className="w-full px-4 py-3 border border-input rounded-md bg-background text-foreground"
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={userForm.password}
+                    onChange={(e) =>
+                      setUserForm((prev) => ({
+                        ...prev,
+                        password: e.target.value,
+                      }))
+                    }
+                    className="w-full px-4 py-3 pr-12 border border-input rounded-md bg-background text-foreground"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-smooth"
+                    title={
+                      showPassword ? 'Ocultar contraseña' : 'Mirar contraseña'
+                    }
+                  >
+                    <Icon
+                      name={showPassword ? 'EyeSlashIcon' : 'EyeIcon'}
+                      size={20}
+                    />
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Debe iniciar con mayúscula, incluir al menos 1 número y 1
+                  carácter especial.
+                </p>
               </div>
             </div>
 

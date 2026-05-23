@@ -39,3 +39,4 @@ turbo/
 .env
 .env.*
 .env.example
+PROJECT_CONTEXT.md

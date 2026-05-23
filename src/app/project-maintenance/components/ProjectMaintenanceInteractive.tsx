@@ -131,6 +131,10 @@ export default function ProjectMaintenanceInteractive() {
     router.push('/login');
   };
 
+  const handleBackToCountries = () => {
+    router.push('/countries-selection');
+  };
+
   const handleAddNew = () => {
     if (!selectedCountry) {
       alert('Por favor seleccione un país primero');
@@ -260,13 +264,22 @@ export default function ProjectMaintenanceInteractive() {
                     {filteredProjects.length} {filteredProjects.length === 1 ? 'proyecto' : 'proyectos'}
                   </p>
                 </div>
-                <button
-                  onClick={handleAddNew}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-smooth shadow-elevation-1"
-                >
-                  <Icon name="PlusIcon" size={20} />
-                  <span className="font-medium">Crear Proyecto</span>
-                </button>
+                <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
+                  <button
+                    onClick={handleBackToCountries}
+                    className="flex items-center justify-center gap-2 px-4 py-2 border border-border text-foreground rounded-md hover:bg-muted transition-smooth"
+                  >
+                    <Icon name="ArrowLeftIcon" size={18} />
+                    <span className="font-medium">Volver a Países</span>
+                  </button>
+                  <button
+                    onClick={handleAddNew}
+                    className="flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-smooth shadow-elevation-1"
+                  >
+                    <Icon name="PlusIcon" size={20} />
+                    <span className="font-medium">Crear Proyecto</span>
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

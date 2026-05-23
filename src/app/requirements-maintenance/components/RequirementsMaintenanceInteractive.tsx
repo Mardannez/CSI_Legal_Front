@@ -870,6 +870,10 @@ export default function RequirementsMaintenanceInteractive() {
     logout();
   };
 
+  const handleBackToCountries = () => {
+    router.push('/countries-selection');
+  };
+
   const fromIndex = (currentPage - 1) * itemsPerPage + 1;
   const toIndex = Math.min(
     (currentPage - 1) * itemsPerPage + requirements.length,
@@ -917,13 +921,23 @@ export default function RequirementsMaintenanceInteractive() {
       <main className="container mx-auto px-4 lg:px-6 py-6">
         <BreadcrumbNavigation />
 
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-foreground mb-2">
-            Mantenimiento de Requisitos
-          </h1>
-          <p className="text-muted-foreground">
-            Gestione los requisitos específicos por país y subcategoría
-          </p>
+        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground mb-2">
+              Mantenimiento de Requisitos
+            </h1>
+            <p className="text-muted-foreground">
+              Gestione los requisitos específicos por país y subcategoría
+            </p>
+          </div>
+
+          <button
+            onClick={handleBackToCountries}
+            className="inline-flex items-center gap-2 px-4 py-2 border border-border text-foreground rounded-md hover:bg-muted transition-smooth"
+          >
+            <Icon name="ArrowLeftIcon" size={18} />
+            <span className="font-medium">Volver a Países</span>
+          </button>
         </div>
 
         <div className="bg-card rounded-lg border border-border p-6 mb-6">
