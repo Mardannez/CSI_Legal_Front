@@ -908,7 +908,7 @@ export default function RequirementsMaintenanceInteractive() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background" data-allow-text-interaction="true">
       <header className="bg-card border-b border-border sticky top-0 z-40 shadow-elevation-1">
         <div className="container mx-auto px-4 lg:px-6">
           <div className="flex items-center justify-between h-16">

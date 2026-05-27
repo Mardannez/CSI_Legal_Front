@@ -14,7 +14,28 @@ const BLOCKED_SHORTCUTS = new Set([
   'x',
 ]);
 
+const ALLOW_INTERACTION_SELECTOR = '[data-allow-text-interaction="true"]';
+
+function isAllowedInteractionTarget(event: Event) {
+  const target = event.target;
+
+  if (
+    target instanceof Element &&
+    target.closest(ALLOW_INTERACTION_SELECTOR)
+  ) {
+    return true;
+  }
+
+  const activeElement = document.activeElement;
+  return (
+    activeElement instanceof Element &&
+    activeElement.closest(ALLOW_INTERACTION_SELECTOR)
+  );
+}
+
 function blockEvent(event: Event) {
+  if (isAllowedInteractionTarget(event)) return;
+
   event.preventDefault();
   event.stopPropagation();
 }
