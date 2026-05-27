@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from 'next';
 import '../styles/index.css';
 
 import { AuthProvider } from "@/context/AuthContext";
+import InteractionBlocker from "@/components/common/InteractionBlocker";
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -27,6 +28,7 @@ export default function RootLayout({
   return (
     <html lang="en">
      <body>
+        <InteractionBlocker />
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

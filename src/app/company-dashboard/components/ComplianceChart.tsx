@@ -74,22 +74,81 @@ function polarPoint(
   };
 }
 
-function slicePath(
+function ringPath(
   cx: number,
   cy: number,
   rx: number,
   ry: number,
+  innerRx: number,
+  innerRy: number,
   startAngle: number,
   endAngle: number
 ) {
-  const start = polarPoint(cx, cy, rx, ry, startAngle);
-  const end = polarPoint(cx, cy, rx, ry, endAngle);
+  const safeEndAngle =
+    endAngle - startAngle >= 359.99 ? startAngle + 359.99 : endAngle;
+  const outerStart = polarPoint(cx, cy, rx, ry, startAngle);
+  const outerEnd = polarPoint(cx, cy, rx, ry, safeEndAngle);
+  const innerStart = polarPoint(cx, cy, innerRx, innerRy, startAngle);
+  const innerEnd = polarPoint(cx, cy, innerRx, innerRy, safeEndAngle);
   const largeArc = endAngle - startAngle > 180 ? 1 : 0;
 
   return [
-    `M ${cx} ${cy}`,
-    `L ${start.x} ${start.y}`,
-    `A ${rx} ${ry} 0 ${largeArc} 1 ${end.x} ${end.y}`,
+    `M ${outerStart.x} ${outerStart.y}`,
+    `A ${rx} ${ry} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y}`,
+    `L ${innerEnd.x} ${innerEnd.y}`,
+    `A ${innerRx} ${innerRy} 0 ${largeArc} 0 ${innerStart.x} ${innerStart.y}`,
+    'Z',
+  ].join(' ');
+}
+
+function outerWallPath(
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  depth: number,
+  startAngle: number,
+  endAngle: number
+) {
+  const safeEndAngle =
+    endAngle - startAngle >= 359.99 ? startAngle + 359.99 : endAngle;
+  const outerStart = polarPoint(cx, cy, rx, ry, startAngle);
+  const outerEnd = polarPoint(cx, cy, rx, ry, safeEndAngle);
+  const bottomStart = polarPoint(cx, cy + depth, rx, ry, startAngle);
+  const bottomEnd = polarPoint(cx, cy + depth, rx, ry, safeEndAngle);
+  const largeArc = endAngle - startAngle > 180 ? 1 : 0;
+
+  return [
+    `M ${outerStart.x} ${outerStart.y}`,
+    `A ${rx} ${ry} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y}`,
+    `L ${bottomEnd.x} ${bottomEnd.y}`,
+    `A ${rx} ${ry} 0 ${largeArc} 0 ${bottomStart.x} ${bottomStart.y}`,
+    'Z',
+  ].join(' ');
+}
+
+function innerWallPath(
+  cx: number,
+  cy: number,
+  innerRx: number,
+  innerRy: number,
+  depth: number,
+  startAngle: number,
+  endAngle: number
+) {
+  const safeEndAngle =
+    endAngle - startAngle >= 359.99 ? startAngle + 359.99 : endAngle;
+  const innerStart = polarPoint(cx, cy, innerRx, innerRy, startAngle);
+  const innerEnd = polarPoint(cx, cy, innerRx, innerRy, safeEndAngle);
+  const bottomStart = polarPoint(cx, cy + depth, innerRx, innerRy, startAngle);
+  const bottomEnd = polarPoint(cx, cy + depth, innerRx, innerRy, safeEndAngle);
+  const largeArc = endAngle - startAngle > 180 ? 1 : 0;
+
+  return [
+    `M ${innerEnd.x} ${innerEnd.y}`,
+    `A ${innerRx} ${innerRy} 0 ${largeArc} 0 ${innerStart.x} ${innerStart.y}`,
+    `L ${bottomStart.x} ${bottomStart.y}`,
+    `A ${innerRx} ${innerRy} 0 ${largeArc} 1 ${bottomEnd.x} ${bottomEnd.y}`,
     'Z',
   ].join(' ');
 }
@@ -185,15 +244,31 @@ export default function ComplianceChart({ data }: ComplianceChartProps) {
                   floodOpacity="0.18"
                 />
               </filter>
+              <linearGradient id="donut-surface" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#ffffff" stopOpacity="0.28" />
+                <stop offset="52%" stopColor="#ffffff" stopOpacity="0.08" />
+                <stop offset="100%" stopColor="#000000" stopOpacity="0.08" />
+              </linearGradient>
             </defs>
+
+            <ellipse
+              cx="378"
+              cy="286"
+              rx="222"
+              ry="88"
+              fill="#111827"
+              opacity="0.08"
+            />
 
             {visibleSlices.map((slice, index) => {
               const cx = 380;
-              const cy = 204;
-              const rx = 184;
-              const ry = 92;
-              const depth = 44;
-              const explode = 18;
+              const cy = 194;
+              const rx = 198;
+              const ry = 94;
+              const innerRx = 86;
+              const innerRy = 40;
+              const depth = 54;
+              const explode = 12;
               const radians = ((slice.midAngle - 90) * Math.PI) / 180;
               const ox = Math.cos(radians) * explode;
               const oy = Math.sin(radians) * explode;
@@ -201,11 +276,13 @@ export default function ComplianceChart({ data }: ComplianceChartProps) {
               return (
                 <path
                   key={`base-${slice.name}-${index}`}
-                  d={slicePath(
+                  d={ringPath(
                     cx + ox,
                     cy + oy + depth,
                     rx,
                     ry,
+                    innerRx,
+                    innerRy,
                     slice.startAngle,
                     slice.endAngle
                   )}
@@ -217,88 +294,160 @@ export default function ComplianceChart({ data }: ComplianceChartProps) {
 
             {visibleSlices.map((slice, index) => {
               const cx = 380;
-              const cy = 204;
-              const rx = 184;
-              const ry = 92;
-              const explode = 18;
+              const cy = 194;
+              const rx = 198;
+              const ry = 94;
+              const innerRx = 86;
+              const innerRy = 40;
+              const depth = 54;
+              const explode = 12;
               const radians = ((slice.midAngle - 90) * Math.PI) / 180;
               const ox = Math.cos(radians) * explode;
               const oy = Math.sin(radians) * explode;
 
               return (
-                <path
-                  key={`top-${slice.name}-${index}`}
-                  d={slicePath(
-                    cx + ox,
-                    cy + oy,
-                    rx,
-                    ry,
-                    slice.startAngle,
-                    slice.endAngle
-                  )}
-                  fill={slice.color}
-                  stroke="var(--color-card)"
-                  strokeWidth="3"
-                  filter="url(#pie-shadow)"
-                />
+                <g key={`walls-${slice.name}-${index}`} filter="url(#pie-shadow)">
+                  <path
+                    d={outerWallPath(
+                      cx + ox,
+                      cy + oy,
+                      rx,
+                      ry,
+                      depth,
+                      slice.startAngle,
+                      slice.endAngle
+                    )}
+                    fill={darkenHex(slice.color, 0.22)}
+                    opacity="0.9"
+                  />
+                  <path
+                    d={innerWallPath(
+                      cx + ox,
+                      cy + oy,
+                      innerRx,
+                      innerRy,
+                      depth,
+                      slice.startAngle,
+                      slice.endAngle
+                    )}
+                    fill={darkenHex(slice.color, 0.46)}
+                    opacity="0.76"
+                  />
+                </g>
               );
             })}
 
             {visibleSlices.map((slice, index) => {
               const cx = 380;
-              const cy = 204;
-              const rx = 196;
-              const ry = 104;
+              const cy = 194;
+              const rx = 198;
+              const ry = 94;
+              const innerRx = 86;
+              const innerRy = 40;
+              const explode = 12;
               const radians = ((slice.midAngle - 90) * Math.PI) / 180;
+              const ox = Math.cos(radians) * explode;
+              const oy = Math.sin(radians) * explode;
+              const anchor = polarPoint(
+                cx + ox,
+                cy + oy,
+                rx + 8,
+                ry + 4,
+                slice.midAngle
+              );
+
+              return (
+                <g key={`top-${slice.name}-${index}`}>
+                  <path
+                    d={ringPath(
+                      cx + ox,
+                      cy + oy,
+                      rx,
+                      ry,
+                      innerRx,
+                      innerRy,
+                      slice.startAngle,
+                      slice.endAngle
+                    )}
+                    fill={slice.color}
+                    stroke="var(--color-card)"
+                    strokeWidth="3"
+                  />
+                  {slice.endAngle - slice.startAngle > 1 && (
+                    <path
+                      d={ringPath(
+                        cx + ox,
+                        cy + oy,
+                        rx - 1,
+                        ry - 1,
+                        innerRx + 1,
+                        innerRy + 1,
+                        slice.startAngle + 0.4,
+                        slice.endAngle - 0.4
+                      )}
+                      fill="url(#donut-surface)"
+                      opacity="0.72"
+                    />
+                  )}
+                  <circle cx={anchor.x} cy={anchor.y} r="2.5" fill="#111827" opacity="0.5" />
+                </g>
+              );
+            })}
+
+            {visibleSlices.map((slice, index) => {
+              const cx = 380;
+              const cy = 194;
+              const rx = 218;
+              const ry = 104;
+              const explode = 12;
+              const radians = ((slice.midAngle - 90) * Math.PI) / 180;
+              const ox = Math.cos(radians) * explode;
+              const oy = Math.sin(radians) * explode;
               const anchor = polarPoint(cx, cy, rx, ry, slice.midAngle);
-              const labelX = clamp(cx + Math.cos(radians) * 292, 72, 640);
-              const labelY = clamp(cy + Math.sin(radians) * 176, 46, 364);
-              const boxWidth = 126;
-              const boxHeight = 54;
+              const labelX = clamp(cx + Math.cos(radians) * 292, 96, 664);
+              const labelY = clamp(cy + Math.sin(radians) * 154, 54, 362);
               const isRight = labelX >= cx;
-              const boxX = isRight ? labelX : labelX - boxWidth;
-              const boxY = labelY - boxHeight / 2;
-              const elbowX = isRight ? boxX - 18 : boxX + boxWidth + 18;
-              const boxEdgeX = isRight ? boxX : boxX + boxWidth;
+              const textAnchor = isRight ? 'start' : 'end';
+              const elbowX = isRight ? labelX - 44 : labelX + 44;
+              const endX = isRight ? labelX - 8 : labelX + 8;
+              const title = slice.name.length > 23
+                ? `${slice.name.slice(0, 23)}...`
+                : slice.name;
 
               return (
                 <g key={`label-${slice.name}-${index}`}>
                   <path
-                    d={`M ${anchor.x} ${anchor.y} L ${elbowX} ${anchor.y} L ${boxEdgeX} ${labelY}`}
+                    d={`M ${anchor.x + ox} ${anchor.y + oy} L ${elbowX} ${anchor.y + oy} L ${endX} ${labelY}`}
                     fill="none"
-                    stroke={slice.color}
-                    strokeWidth="4"
-                    strokeLinecap="round"
+                    stroke="#9CA3AF"
+                    strokeWidth="1.5"
+                    strokeDasharray="3 3"
                     strokeLinejoin="round"
                   />
-                  <circle cx={anchor.x} cy={anchor.y} r="5" fill={slice.color} />
-                  <rect
-                    x={boxX}
-                    y={boxY}
-                    width={boxWidth}
-                    height={boxHeight}
-                    rx="10"
-                    fill="var(--color-card)"
-                    stroke={slice.color}
-                    strokeWidth="4"
-                  />
+                  <circle cx={anchor.x + ox} cy={anchor.y + oy} r="2.5" fill="#6B7280" />
                   <text
-                    x={boxX + boxWidth / 2}
-                    y={boxY + 18}
-                    textAnchor="middle"
-                    className="fill-muted-foreground text-[10px] font-semibold uppercase"
+                    x={labelX}
+                    y={labelY - 12}
+                    textAnchor={textAnchor}
+                    className="fill-foreground text-[13px] font-bold"
                   >
-                    {slice.name.length > 18
-                      ? `${slice.name.slice(0, 18)}...`
-                      : slice.name}
+                    {slice.percentage.toFixed(0)}% de requisitos
                   </text>
                   <text
-                    x={boxX + boxWidth / 2}
-                    y={boxY + 42}
-                    textAnchor="middle"
-                    className="fill-foreground text-[24px] font-bold"
+                    x={labelX}
+                    y={labelY + 4}
+                    textAnchor={textAnchor}
+                    className="fill-foreground text-[12px] font-semibold"
                   >
-                    {slice.percentage.toFixed(0)}%
+                    {title}
+                  </text>
+                  <text
+                    x={labelX}
+                    y={labelY + 20}
+                    textAnchor={textAnchor}
+                    className="fill-muted-foreground text-[10px]"
+                  >
+                    {slice.value} en total
                   </text>
                 </g>
               );

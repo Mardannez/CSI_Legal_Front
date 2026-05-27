@@ -59,6 +59,7 @@ interface LegalReferenceItem {
   Ambito: string;
   Articulo: string;
   Ley: string;
+  Contenido: string | null;
   Modificaciones: string | null;
   FechaRegistro?: string | null;
 }
@@ -690,7 +691,10 @@ export default function ItemDetailModal({
         }
       }
 
-      const refs = (json?.ReferenciasLegales || []) as LegalReferenceItem[];
+      const refs = ((json?.ReferenciasLegales || []) as any[]).map((ref) => ({
+        ...ref,
+        Contenido: ref.Contenido ?? ref.contenido ?? null,
+      })) as LegalReferenceItem[];
       setLegalReferences(refs);
 
       if (refs.length > 0) {
@@ -1873,11 +1877,15 @@ export default function ItemDetailModal({
                           <p className="text-foreground leading-relaxed">
                             {selectedLegalItem.Articulo} - {selectedLegalItem.Ley}
                           </p>
+                          {selectedLegalItem.Contenido ? (
+                            <p className="text-sm text-muted-foreground mt-2 whitespace-pre-line">
+                              {selectedLegalItem.Contenido}
+                            </p>
+                          ) : (
                           <p className="text-sm text-muted-foreground mt-2">
-                            No se configuró un campo de contenido del artículo en la
-                            tabla ReferenciaLegal. Si luego agregas ese campo, aquí
-                            se puede mostrar el texto legal completo.
+                            Sin contenido registrado para este artículo.
                           </p>
+                          )}
                         </div>
                       </div>
 
