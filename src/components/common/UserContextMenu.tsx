@@ -190,8 +190,17 @@ const canViewAdministration = !!safeUser.isGlobalAdmin || isSuperAdminByRole;
               <span>Configuración</span>
             </button>
 
-         {canViewAdministration && (
+            {canViewAdministration && (
           <>
+            <Link
+              href="/countries-selection"
+              onClick={() => setIsOpen(false)}
+              className="flex items-center gap-3 px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-smooth"
+            >
+              <Icon name="ArrowLeftIcon" size={18} className="text-muted-foreground" />
+              <span>Volver a Selección de Países</span>
+            </Link>
+
             <Link
               href="/user-management"
               onClick={() => setIsOpen(false)}

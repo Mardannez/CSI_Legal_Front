@@ -42,6 +42,7 @@ interface ItemDetailModalProps {
   // EMPRESA_LECTOR debe venir en false desde el dashboard.
   // ==========================================================
   canEdit?: boolean;
+  canDownloadFiles?: boolean;
 }
 
 type TabType =
@@ -58,6 +59,7 @@ interface LegalReferenceItem {
   Ambito: string;
   Articulo: string;
   Ley: string;
+  Contenido: string | null;
   Modificaciones: string | null;
   FechaRegistro?: string | null;
 }
@@ -117,6 +119,14 @@ interface AuditEntry {
   user: string;
   action: string;
   details: string;
+}
+
+type ToastVariant = 'loading' | 'success' | 'error' | 'info';
+
+interface ModalToast {
+  id: number;
+  message: string;
+  variant: ToastVariant;
 }
 
 // ==========================================================
@@ -238,11 +248,19 @@ export default function ItemDetailModal({
   onClose,
   onSave,
   canEdit = false,
+  canDownloadFiles = false,
 }: ItemDetailModalProps) {
   const [isHydrated, setIsHydrated] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('info');
   const [isEditMode, setIsEditMode] = useState(false);
   const [editedItem, setEditedItem] = useState<ComplianceItem | null>(null);
+  const [toast, setToast] = useState<ModalToast | null>(null);
+  const [pdfViewer, setPdfViewer] = useState<{
+    title: string;
+    url: string;
+    type: 'pdf' | 'image';
+  } | null>(null);
+  const [loadingPdfViewer, setLoadingPdfViewer] = useState(false);
 
   // ==========================================================
   // INFORMACIÓN DEL DETALLE DE EVALUACIÓN
@@ -355,6 +373,33 @@ export default function ItemDetailModal({
     setIsHydrated(true);
   }, []);
 
+  const showToast = (message: string, variant: ToastVariant = 'info') => {
+    setToast({
+      id: Date.now(),
+      message,
+      variant,
+    });
+  };
+
+  useEffect(() => {
+    if (!toast || toast.variant === 'loading') return;
+
+    const timeout = window.setTimeout(() => {
+      setToast((current) => (current?.id === toast.id ? null : current));
+    }, 3600);
+
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
+
+  useEffect(() => {
+    return () => {
+      setPdfViewer((current) => {
+        if (current?.url) window.URL.revokeObjectURL(current.url);
+        return null;
+      });
+    };
+  }, []);
+
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -362,6 +407,12 @@ export default function ItemDetailModal({
       setInfoSnapshot(item);
       setIsEditMode(false);
       setActiveTab('info');
+      setToast(null);
+      setPdfViewer((current) => {
+        if (current?.url) window.URL.revokeObjectURL(current.url);
+        return null;
+      });
+      setLoadingPdfViewer(false);
 
       setInfoError(null);
       setLoadingInfo(false);
@@ -405,6 +456,11 @@ export default function ItemDetailModal({
       });
     } else {
       document.body.style.overflow = 'unset';
+      setPdfViewer((current) => {
+        if (current?.url) window.URL.revokeObjectURL(current.url);
+        return null;
+      });
+      setLoadingPdfViewer(false);
     }
 
     return () => {
@@ -530,6 +586,7 @@ export default function ItemDetailModal({
   const loadDetalleInformacion = async (detalleId: number) => {
     setLoadingInfo(true);
     setInfoError(null);
+    showToast('Cargando informacion del requisito...', 'loading');
 
     try {
       const json = await fetchJson(
@@ -545,8 +602,11 @@ export default function ItemDetailModal({
 
       setEditedItem(mapped);
       setInfoSnapshot(mapped);
+      setToast(null);
     } catch (e: any) {
-      setInfoError(e?.message || 'Error cargando información del requisito');
+      const message = e?.message || 'Error cargando informacion del requisito';
+      setInfoError(message);
+      showToast(message, 'error');
     } finally {
       setLoadingInfo(false);
     }
@@ -613,11 +673,28 @@ export default function ItemDetailModal({
     setLegalReferencesError(null);
 
     try {
-      const json = await fetchJson(
-        `${API_URL}/api/requisitos-mantenimiento/requisitos/${requisitoId}/referencias-legales`
-      );
+      let json: any;
 
-      const refs = (json?.ReferenciasLegales || []) as LegalReferenceItem[];
+      try {
+        json = await fetchJson(
+          `${API_URL}/api/requisitos-mantenimiento/requisitos/${requisitoId}/referencias-legales`
+        );
+      } catch (error: any) {
+        const message = String(error?.message || '').toLowerCase();
+
+        if (!canEdit && message.includes('permisos')) {
+          json = await fetchJson(
+            `${API_URL}/api/requisitos/${requisitoId}/referencias-legales`
+          );
+        } else {
+          throw error;
+        }
+      }
+
+      const refs = ((json?.ReferenciasLegales || []) as any[]).map((ref) => ({
+        ...ref,
+        Contenido: ref.Contenido ?? ref.contenido ?? null,
+      })) as LegalReferenceItem[];
       setLegalReferences(refs);
 
       if (refs.length > 0) {
@@ -643,9 +720,23 @@ export default function ItemDetailModal({
     setLawsError(null);
 
     try {
-      const json = await fetchJson(
-        `${API_URL}/api/requisitos-mantenimiento/referencias-legales/${idReferenciaLegal}/leyes`
-      );
+      let json: any;
+
+      try {
+        json = await fetchJson(
+          `${API_URL}/api/requisitos-mantenimiento/referencias-legales/${idReferenciaLegal}/leyes`
+        );
+      } catch (error: any) {
+        const message = String(error?.message || '').toLowerCase();
+
+        if (!canEdit && message.includes('permisos')) {
+          json = await fetchJson(
+            `${API_URL}/api/requisitos/referencias-legales/${idReferenciaLegal}/leyes`
+          );
+        } else {
+          throw error;
+        }
+      }
 
       setLaws((json?.Leyes || []) as LawItem[]);
     } catch (e: any) {
@@ -674,6 +765,11 @@ export default function ItemDetailModal({
   }, [selectedLegalItem]);
 
   const handleDownloadLaw = async (law: LawItem) => {
+    if (!canDownloadFiles) {
+      showToast('No tienes permiso para descargar este PDF', 'error');
+      return;
+    }
+
     try {
       const token = getToken();
 
@@ -715,7 +811,7 @@ export default function ItemDetailModal({
 
       window.URL.revokeObjectURL(url);
     } catch (e: any) {
-      alert(e?.message || 'Error descargando ley');
+      showToast(e?.message || 'Error descargando ley', 'error');
     }
   };
 
@@ -772,6 +868,11 @@ export default function ItemDetailModal({
   }, [activeTab, isOpen, item]);
 
   const handleDownloadEvidence = async (evidence: Evidence) => {
+    if (!canDownloadFiles) {
+      showToast('No tienes permiso para descargar este PDF', 'error');
+      return;
+    }
+
     try {
       const token = getToken();
 
@@ -821,7 +922,7 @@ export default function ItemDetailModal({
 
       window.URL.revokeObjectURL(url);
     } catch (e: any) {
-      alert(e?.message || 'Error descargando evidencia');
+      showToast(e?.message || 'Error descargando evidencia', 'error');
     }
   };
 
@@ -844,7 +945,7 @@ export default function ItemDetailModal({
         await loadEvidences(item.id);
       }
     } catch (e: any) {
-      alert(e?.message || 'Error eliminando evidencia');
+      showToast(e?.message || 'Error eliminando evidencia', 'error');
     } finally {
       setDeletingEvidenceId(null);
     }
@@ -901,17 +1002,17 @@ export default function ItemDetailModal({
 
   const handleSaveEvent = async () => {
     if (!item?.id) {
-      alert('No se encontró el detalle de evaluación');
+      showToast('No se encontro el detalle de evaluacion', 'error');
       return;
     }
 
     if (!newEvent.date) {
-      alert('Seleccione una fecha');
+      showToast('Seleccione una fecha', 'error');
       return;
     }
 
     if (!newEvent.idEvidencia) {
-      alert('Seleccione una evidencia');
+      showToast('Seleccione una evidencia', 'error');
       return;
     }
 
@@ -939,7 +1040,7 @@ export default function ItemDetailModal({
         comment: '',
       });
     } catch (e: any) {
-      alert(e?.message || 'Error guardando evento');
+      showToast(e?.message || 'Error guardando evento', 'error');
     } finally {
       setSavingEvent(false);
     }
@@ -959,7 +1060,7 @@ export default function ItemDetailModal({
         await loadEvents(item.id);
       }
     } catch (e: any) {
-      alert(e?.message || 'Error eliminando evento');
+      showToast(e?.message || 'Error eliminando evento', 'error');
     } finally {
       setDeletingEventId(null);
     }
@@ -1016,13 +1117,15 @@ export default function ItemDetailModal({
     if (!item.id) return;
 
     loadAssignedResponsibles(item.id);
-    loadAvailableResponsibles(item.id);
-  }, [activeTab, isOpen, item]);
+    if (canEdit) loadAvailableResponsibles(item.id);
+  }, [activeTab, isOpen, item, canEdit]);
 
   //--UseEffect para controlar si usuarios de empresas con solo lectura no puedan ver el boton de editar ---//
     useEffect(() => {
       if (!canEdit) {
         setIsEditMode(false);
+        setShowAddEventForm(false);
+        setShowResponsibleModal(false);
       }
     }, [canEdit]);
 
@@ -1051,12 +1154,12 @@ export default function ItemDetailModal({
 
   const handleAssignExistingResponsible = async () => {
     if (!item?.id) {
-      alert('No se encontró el detalle de evaluación');
+      showToast('No se encontro el detalle de evaluacion', 'error');
       return;
     }
 
     if (!selectedAvailableResponsibleId) {
-      alert('Seleccione un responsable');
+      showToast('Seleccione un responsable', 'error');
       return;
     }
 
@@ -1080,7 +1183,7 @@ export default function ItemDetailModal({
       await loadAvailableResponsibles(item.id);
       handleCloseResponsibleModal();
     } catch (e: any) {
-      alert(e?.message || 'Error asignando responsable');
+      showToast(e?.message || 'Error asignando responsable', 'error');
     } finally {
       setAssigningResponsible(false);
     }
@@ -1088,12 +1191,12 @@ export default function ItemDetailModal({
 
   const handleCreateAndAssignResponsible = async () => {
     if (!item?.id) {
-      alert('No se encontró el detalle de evaluación');
+      showToast('No se encontro el detalle de evaluacion', 'error');
       return;
     }
 
     if (!newResponsibleForm.nombre.trim()) {
-      alert('Ingrese el nombre del responsable');
+      showToast('Ingrese el nombre del responsable', 'error');
       return;
     }
 
@@ -1124,7 +1227,7 @@ export default function ItemDetailModal({
 
       handleCloseResponsibleModal();
     } catch (e: any) {
-      alert(e?.message || 'Error creando y asignando responsable');
+      showToast(e?.message || 'Error creando y asignando responsable', 'error');
     } finally {
       setCreatingResponsible(false);
     }
@@ -1148,7 +1251,7 @@ export default function ItemDetailModal({
         await loadAvailableResponsibles(item.id);
       }
     } catch (e: any) {
-      alert(e?.message || 'Error quitando responsable');
+      showToast(e?.message || 'Error quitando responsable', 'error');
     } finally {
       setDeletingResponsibleRelationId(null);
     }
@@ -1185,22 +1288,23 @@ export default function ItemDetailModal({
       : null;
 
     if (!fechaPlanificada) {
-      alert('Seleccione la fecha planificada');
+      showToast('Seleccione la fecha planificada', 'error');
       return;
     }
 
     if (!responsable) {
-      alert('Ingrese el responsable');
+      showToast('Ingrese el responsable', 'error');
       return;
     }
 
     if (!idPeriocidad) {
-      alert('Seleccione la periodicidad');
+      showToast('Seleccione la periodicidad', 'error');
       return;
     }
 
     setSavingInfo(true);
     setInfoError(null);
+    showToast('Guardando informacion del requisito...', 'loading');
 
     try {
       const json = await fetchJson(
@@ -1225,10 +1329,11 @@ export default function ItemDetailModal({
       setInfoSnapshot(updatedItem);
       onSave(updatedItem);
       setIsEditMode(false);
+      showToast('Informacion del requisito guardada', 'success');
     } catch (e: any) {
-      const message = e?.message || 'Error guardando información';
+      const message = e?.message || 'Error guardando informacion';
       setInfoError(message);
-      alert(message);
+      showToast(message, 'error');
     } finally {
       setSavingInfo(false);
     }
@@ -1246,9 +1351,167 @@ export default function ItemDetailModal({
     }
   };
 
+  const isPdfEvidence = (evidence: Evidence) => {
+    const mimeType = (evidence.mimeType || '').toLowerCase();
+    const fileName = `${evidence.originalFileName || ''} ${evidence.name || ''}`.toLowerCase();
+
+    return (
+      mimeType.includes('pdf') ||
+      evidence.type.toLowerCase() === 'pdf' ||
+      fileName.includes('.pdf')
+    );
+  };
+
+  const isImageEvidence = (evidence: Evidence) => {
+    const mimeType = (evidence.mimeType || '').toLowerCase();
+    const fileName = `${evidence.originalFileName || ''} ${evidence.name || ''}`.toLowerCase();
+    const type = evidence.type.toLowerCase();
+
+    return (
+      mimeType.startsWith('image/') ||
+      ['jpg', 'jpeg', 'png', 'webp'].includes(type) ||
+      /\.(jpg|jpeg|png|webp)(\s|$)/.test(fileName)
+    );
+  };
+
+  const handleViewEvidence = (evidence: Evidence) => {
+    const isPdf = isPdfEvidence(evidence);
+    const isImage = isImageEvidence(evidence);
+
+    if (!isPdf && !isImage) {
+      showToast(
+        'El visor integrado solo esta disponible para archivos PDF o imagenes',
+        'error'
+      );
+      return;
+    }
+
+    openFileViewer(
+      `${API_URL}/api/evaluaciones/evidencias/${evidence.id}/download`,
+      evidence.originalFileName || evidence.name,
+      isImage ? 'image' : 'pdf'
+    );
+  };
+
+  const openFileViewer = async (
+    url: string | string[],
+    title: string,
+    type: 'pdf' | 'image'
+  ) => {
+    setLoadingPdfViewer(true);
+    showToast(
+      type === 'image' ? 'Cargando visor de imagen...' : 'Cargando visor PDF...',
+      'loading'
+    );
+
+    try {
+      const token = getToken();
+      const urls = Array.isArray(url) ? url : [url];
+      let res: Response | null = null;
+      let lastError = '';
+
+      for (const currentUrl of urls) {
+        res = await fetch(currentUrl, {
+          method: 'GET',
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+
+        if (res.ok || res.status === 401) break;
+
+        lastError = await res.text();
+      }
+
+      if (!res) {
+        throw new Error('Error cargando visor de archivo');
+      }
+
+      if (res.status === 401) {
+        localStorage.removeItem('CSI_Legal_token');
+        localStorage.removeItem('CSI_Legal_user');
+        throw new Error('Sesion expirada');
+      }
+
+      if (!res.ok) {
+        throw new Error(lastError || 'Error cargando visor de archivo');
+      }
+
+      const blob = await res.blob();
+      const viewerBlob =
+        type === 'pdf' && blob.type !== 'application/pdf'
+          ? new Blob([blob], { type: 'application/pdf' })
+          : blob;
+      const objectUrl = window.URL.createObjectURL(viewerBlob);
+
+      setPdfViewer((current) => {
+        if (current?.url) window.URL.revokeObjectURL(current.url);
+        return {
+          title,
+          url: objectUrl,
+          type,
+        };
+      });
+      setToast(null);
+    } catch (e: any) {
+      showToast(e?.message || 'Error cargando visor de archivo', 'error');
+    } finally {
+      setLoadingPdfViewer(false);
+    }
+  };
+
+  const handleViewLaw = (law: LawItem) => {
+    openFileViewer(
+      [
+        `${API_URL}/api/requisitos/leyes/${law.id}/download`,
+        `${API_URL}/api/requisitos-mantenimiento/leyes/${law.id}/download`,
+      ],
+      law.NombreLey,
+      'pdf'
+    );
+  };
+
+  const toastConfig = toast
+    ? {
+        loading: {
+          icon: 'ArrowPathIcon',
+          className: 'border-border bg-card text-foreground',
+          iconClassName: 'text-primary animate-spin',
+        },
+        success: {
+          icon: 'CheckCircleIcon',
+          className: 'border-success/30 bg-success/10 text-success',
+          iconClassName: 'text-success',
+        },
+        error: {
+          icon: 'ExclamationTriangleIcon',
+          className: 'border-error/30 bg-error/10 text-error',
+          iconClassName: 'text-error',
+        },
+        info: {
+          icon: 'InformationCircleIcon',
+          className: 'border-primary/30 bg-primary/10 text-primary',
+          iconClassName: 'text-primary',
+        },
+      }[toast.variant]
+    : null;
+
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        {toast && toastConfig ? (
+          <div
+            className={`absolute right-6 top-6 z-[70] flex max-w-sm items-start gap-3 rounded-md border px-4 py-3 text-sm shadow-elevation-3 ${toastConfig.className}`}
+          >
+            <Icon
+              name={toastConfig.icon}
+              size={18}
+              className={`mt-0.5 flex-shrink-0 ${toastConfig.iconClassName}`}
+            />
+            <p className="leading-5">{toast.message}</p>
+          </div>
+        ) : null}
+
         <div className="bg-card rounded-lg border border-border shadow-elevation-4 w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-border">
             <div className="flex-1">
@@ -1300,23 +1563,6 @@ export default function ItemDetailModal({
           <div className="flex-1 overflow-y-auto px-6 py-6">
             {activeTab === 'info' && (
               <div className="space-y-6">
-                {/* ======================================================
-                    INFORMACIÓN DEL DETALLE DE EVALUACIÓN
-                    Mensajes de carga/error para la lectura y guardado
-                    de los campos propios del detalle.
-                   ====================================================== */}
-                {loadingInfo && (
-                  <div className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-                    Cargando información del requisito...
-                  </div>
-                )}
-
-                {infoError && (
-                  <div className="rounded-md border border-error/30 bg-error/10 px-4 py-3 text-sm text-error">
-                    {infoError}
-                  </div>
-                )}
-
                 {isEditMode ? (
                   <>
                     <div>
@@ -1631,11 +1877,15 @@ export default function ItemDetailModal({
                           <p className="text-foreground leading-relaxed">
                             {selectedLegalItem.Articulo} - {selectedLegalItem.Ley}
                           </p>
+                          {selectedLegalItem.Contenido ? (
+                            <p className="text-sm text-muted-foreground mt-2 whitespace-pre-line">
+                              {selectedLegalItem.Contenido}
+                            </p>
+                          ) : (
                           <p className="text-sm text-muted-foreground mt-2">
-                            No se configuró un campo de contenido del artículo en la
-                            tabla ReferenciaLegal. Si luego agregas ese campo, aquí
-                            se puede mostrar el texto legal completo.
+                            Sin contenido registrado para este artículo.
                           </p>
+                          )}
                         </div>
                       </div>
 
@@ -1662,11 +1912,9 @@ export default function ItemDetailModal({
                         ) : (
                           <div className="space-y-2">
                             {laws.map((law) => (
-                              <button
+                              <div
                                 key={law.id}
-                                type="button"
-                                onClick={() => handleDownloadLaw(law)}
-                                className="w-full flex items-start gap-3 p-3 bg-background border border-border rounded-md hover:bg-muted/50 transition-smooth text-left"
+                                className="w-full flex items-start gap-3 p-3 bg-background border border-border rounded-md"
                               >
                                 <div className="flex-shrink-0 mt-0.5">
                                   <Icon
@@ -1676,15 +1924,38 @@ export default function ItemDetailModal({
                                   />
                                 </div>
 
-                                <div className="flex-1">
+                                <div className="flex-1 min-w-0">
                                   <p className="text-sm text-foreground">
                                     {law.NombreLey}
                                   </p>
                                   <p className="text-xs text-muted-foreground mt-1">
-                                    Clic para descargar PDF
+                                    PDF disponible para visualizar en el sistema
                                   </p>
                                 </div>
-                              </button>
+
+                                <div className="flex flex-shrink-0 items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleViewLaw(law)}
+                                    disabled={loadingPdfViewer}
+                                    className="px-3 py-2 text-xs font-medium text-primary border border-primary rounded-md hover:bg-primary/10 transition-smooth flex items-center gap-2 disabled:opacity-50"
+                                  >
+                                    <Icon name="EyeIcon" size={15} />
+                                    Ver PDF
+                                  </button>
+
+                                  {canDownloadFiles ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDownloadLaw(law)}
+                                      className="px-3 py-2 text-xs font-medium text-foreground border border-input rounded-md hover:bg-muted transition-smooth flex items-center gap-2"
+                                    >
+                                      <Icon name="ArrowDownTrayIcon" size={15} />
+                                      Descargar
+                                    </button>
+                                  ) : null}
+                                </div>
+                              </div>
                             ))}
                           </div>
                         )}
@@ -1698,13 +1969,15 @@ export default function ItemDetailModal({
             {activeTab === 'evidence' && (
               <div className="flex gap-6 h-[500px]">
                 <div className="w-1/3 flex flex-col border-r border-border pr-6">
-                  <button
-                    onClick={() => setShowNewEvidenceModal(true)}
-                    className="w-full px-4 py-3 mb-4 text-sm font-medium text-primary border-2 border-primary rounded-md hover:bg-primary/10 transition-smooth flex items-center justify-center gap-2"
-                  >
-                    <Icon name="PlusIcon" size={18} />
-                    Nueva evidencia
-                  </button>
+                  {canEdit ? (
+                    <button
+                      onClick={() => setShowNewEvidenceModal(true)}
+                      className="w-full px-4 py-3 mb-4 text-sm font-medium text-primary border-2 border-primary rounded-md hover:bg-primary/10 transition-smooth flex items-center justify-center gap-2"
+                    >
+                      <Icon name="PlusIcon" size={18} />
+                      Nueva evidencia
+                    </button>
+                  ) : null}
 
                   {loadingEvidences ? (
                     <div className="space-y-2">
@@ -1778,23 +2051,42 @@ export default function ItemDetailModal({
 
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => handleDownloadEvidence(selectedEvidence)}
+                            onClick={() => handleViewEvidence(selectedEvidence)}
+                            disabled={
+                              loadingPdfViewer ||
+                              (!isPdfEvidence(selectedEvidence) &&
+                                !isImageEvidence(selectedEvidence))
+                            }
                             className="px-3 py-2 text-sm font-medium text-primary border border-primary rounded-md hover:bg-primary/10 transition-smooth flex items-center gap-2"
                           >
-                            <Icon name="ArrowDownTrayIcon" size={16} />
-                            Descargar
+                            <Icon name="EyeIcon" size={16} />
+                            {isImageEvidence(selectedEvidence)
+                              ? 'Ver imagen'
+                              : 'Ver PDF'}
                           </button>
 
-                          <button
-                            onClick={() => handleDeleteEvidence(selectedEvidence)}
-                            disabled={deletingEvidenceId === selectedEvidence.id}
-                            className="px-3 py-2 text-sm font-medium text-error border border-error rounded-md hover:bg-error/10 transition-smooth flex items-center gap-2 disabled:opacity-50"
-                          >
-                            <Icon name="TrashIcon" size={16} />
-                            {deletingEvidenceId === selectedEvidence.id
-                              ? 'Eliminando...'
-                              : 'Eliminar'}
-                          </button>
+                          {canDownloadFiles ? (
+                            <button
+                              onClick={() => handleDownloadEvidence(selectedEvidence)}
+                              className="px-3 py-2 text-sm font-medium text-foreground border border-input rounded-md hover:bg-muted transition-smooth flex items-center gap-2"
+                            >
+                              <Icon name="ArrowDownTrayIcon" size={16} />
+                              Descargar
+                            </button>
+                          ) : null}
+
+                          {canEdit ? (
+                            <button
+                              onClick={() => handleDeleteEvidence(selectedEvidence)}
+                              disabled={deletingEvidenceId === selectedEvidence.id}
+                              className="px-3 py-2 text-sm font-medium text-error border border-error rounded-md hover:bg-error/10 transition-smooth flex items-center gap-2 disabled:opacity-50"
+                            >
+                              <Icon name="TrashIcon" size={16} />
+                              {deletingEvidenceId === selectedEvidence.id
+                                ? 'Eliminando...'
+                                : 'Eliminar'}
+                            </button>
+                          ) : null}
                         </div>
                       </div>
 
@@ -1833,12 +2125,14 @@ export default function ItemDetailModal({
                     Eventos de Calendario
                   </h3>
 
-                  <button
-                    onClick={handleAddEventClick}
-                    className="px-4 py-2 text-sm font-medium text-primary border border-primary rounded-md hover:bg-primary/10 transition-smooth"
-                  >
-                    Agregar evento
-                  </button>
+                  {canEdit ? (
+                    <button
+                      onClick={handleAddEventClick}
+                      className="px-4 py-2 text-sm font-medium text-primary border border-primary rounded-md hover:bg-primary/10 transition-smooth"
+                    >
+                      Agregar evento
+                    </button>
+                  ) : null}
                 </div>
 
                 {showAddEventForm && (
@@ -1964,15 +2258,17 @@ export default function ItemDetailModal({
                             )}
                           </div>
 
-                          <button
-                            onClick={() => handleDeleteEvent(event.id)}
-                            disabled={deletingEventId === event.id}
-                            className="px-3 py-2 text-sm font-medium text-error border border-error rounded-md hover:bg-error/10 transition-smooth disabled:opacity-50"
-                          >
-                            {deletingEventId === event.id
-                              ? 'Eliminando...'
-                              : 'Eliminar'}
-                          </button>
+                          {canEdit ? (
+                            <button
+                              onClick={() => handleDeleteEvent(event.id)}
+                              disabled={deletingEventId === event.id}
+                              className="px-3 py-2 text-sm font-medium text-error border border-error rounded-md hover:bg-error/10 transition-smooth disabled:opacity-50"
+                            >
+                              {deletingEventId === event.id
+                                ? 'Eliminando...'
+                                : 'Eliminar'}
+                            </button>
+                          ) : null}
                         </div>
                       </div>
                     ))}
@@ -1988,12 +2284,14 @@ export default function ItemDetailModal({
                     Responsables del Requisito
                   </h3>
 
-                  <button
-                    onClick={handleOpenResponsibleModal}
-                    className="px-4 py-2 text-sm font-medium text-primary border border-primary rounded-md hover:bg-primary/10 transition-smooth"
-                  >
-                    Agregar responsable
-                  </button>
+                  {canEdit ? (
+                    <button
+                      onClick={handleOpenResponsibleModal}
+                      className="px-4 py-2 text-sm font-medium text-primary border border-primary rounded-md hover:bg-primary/10 transition-smooth"
+                    >
+                      Agregar responsable
+                    </button>
+                  ) : null}
                 </div>
 
                 {responsiblesError && (
@@ -2041,17 +2339,19 @@ export default function ItemDetailModal({
                             </p>
                           </div>
 
-                          <button
-                            onClick={() =>
-                              handleDeleteResponsibleAssignment(row.id)
-                            }
-                            disabled={deletingResponsibleRelationId === row.id}
-                            className="px-3 py-2 text-sm font-medium text-error border border-error rounded-md hover:bg-error/10 transition-smooth disabled:opacity-50"
-                          >
-                            {deletingResponsibleRelationId === row.id
-                              ? 'Quitando...'
-                              : 'Quitar'}
-                          </button>
+                          {canEdit ? (
+                            <button
+                              onClick={() =>
+                                handleDeleteResponsibleAssignment(row.id)
+                              }
+                              disabled={deletingResponsibleRelationId === row.id}
+                              className="px-3 py-2 text-sm font-medium text-error border border-error rounded-md hover:bg-error/10 transition-smooth disabled:opacity-50"
+                            >
+                              {deletingResponsibleRelationId === row.id
+                                ? 'Quitando...'
+                                : 'Quitar'}
+                            </button>
+                          ) : null}
                         </div>
                       </div>
                     ))}
@@ -2124,6 +2424,53 @@ export default function ItemDetailModal({
           }}
         />
       </div>
+
+      {pdfViewer ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-card rounded-lg border border-border shadow-elevation-4 w-full max-w-6xl h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <div className="min-w-0">
+                <h3 className="text-lg font-semibold text-foreground truncate">
+                  {pdfViewer.title}
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {pdfViewer.type === 'image'
+                    ? 'Visor de imagen integrado'
+                    : 'Visor PDF integrado'}
+                </p>
+              </div>
+
+              <button
+                onClick={() =>
+                  setPdfViewer((current) => {
+                    if (current?.url) window.URL.revokeObjectURL(current.url);
+                    return null;
+                  })
+                }
+                className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-smooth"
+              >
+                <Icon name="XMarkIcon" size={22} />
+              </button>
+            </div>
+
+            {pdfViewer.type === 'image' ? (
+              <div className="flex-1 min-h-0 bg-background p-4 flex items-center justify-center overflow-auto">
+                <img
+                  src={pdfViewer.url}
+                  alt={pdfViewer.title}
+                  className="max-h-full max-w-full object-contain rounded-md"
+                />
+              </div>
+            ) : (
+              <iframe
+                src={`${pdfViewer.url}#toolbar=0&navpanes=0`}
+                title={pdfViewer.title}
+                className="flex-1 w-full bg-background"
+              />
+            )}
+          </div>
+        </div>
+      ) : null}
 
       {/* ======================================================
           MODAL RESPONSABLES

@@ -54,6 +54,7 @@ interface LegalReferenceRow {
   Ambito: string;
   Articulo: string;
   Ley: string;
+  Contenido: string | null;
   Modificaciones: string | null;
   FechaRegistro?: string | null;
 }
@@ -62,6 +63,7 @@ interface LegalReferenceFormData {
   Ambito: string;
   Articulo: string;
   Ley: string;
+  Contenido: string;
   Modificaciones: string;
 }
 
@@ -179,6 +181,7 @@ export default function RequirementsMaintenanceInteractive() {
     Ambito: '',
     Articulo: '',
     Ley: '',
+    Contenido: '',
     Modificaciones: '',
   });
 
@@ -372,7 +375,10 @@ export default function RequirementsMaintenanceInteractive() {
         `${API_URL}/api/requisitos-mantenimiento/requisitos/${requirementId}/referencias-legales`
       );
 
-      const refs = (json?.ReferenciasLegales || []) as LegalReferenceRow[];
+      const refs = ((json?.ReferenciasLegales || []) as any[]).map((ref) => ({
+        ...ref,
+        Contenido: ref.Contenido ?? ref.contenido ?? null,
+      })) as LegalReferenceRow[];
       setLegalReferences(refs);
 
       const nextSelectedId =
@@ -499,6 +505,7 @@ export default function RequirementsMaintenanceInteractive() {
       Ambito: '',
       Articulo: '',
       Ley: '',
+      Contenido: '',
       Modificaciones: '',
     });
   };
@@ -645,6 +652,7 @@ export default function RequirementsMaintenanceInteractive() {
       Ambito: legalFormData.Ambito.trim(),
       Articulo: legalFormData.Articulo.trim(),
       Ley: legalFormData.Ley.trim(),
+      Contenido: legalFormData.Contenido.trim(),
       Modificaciones: legalFormData.Modificaciones.trim(),
     };
 
@@ -693,6 +701,7 @@ export default function RequirementsMaintenanceInteractive() {
       Ambito: ref.Ambito || '',
       Articulo: ref.Articulo || '',
       Ley: ref.Ley || '',
+      Contenido: ref.Contenido || '',
       Modificaciones: ref.Modificaciones || '',
     });
     setSelectedLegalReferenceId(ref.id);
@@ -870,6 +879,10 @@ export default function RequirementsMaintenanceInteractive() {
     logout();
   };
 
+  const handleBackToCountries = () => {
+    router.push('/countries-selection');
+  };
+
   const fromIndex = (currentPage - 1) * itemsPerPage + 1;
   const toIndex = Math.min(
     (currentPage - 1) * itemsPerPage + requirements.length,
@@ -917,13 +930,23 @@ export default function RequirementsMaintenanceInteractive() {
       <main className="container mx-auto px-4 lg:px-6 py-6">
         <BreadcrumbNavigation />
 
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-foreground mb-2">
-            Mantenimiento de Requisitos
-          </h1>
-          <p className="text-muted-foreground">
-            Gestione los requisitos específicos por país y subcategoría
-          </p>
+        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground mb-2">
+              Mantenimiento de Requisitos
+            </h1>
+            <p className="text-muted-foreground">
+              Gestione los requisitos específicos por país y subcategoría
+            </p>
+          </div>
+
+          <button
+            onClick={handleBackToCountries}
+            className="inline-flex items-center gap-2 px-4 py-2 border border-border text-foreground rounded-md hover:bg-muted transition-smooth"
+          >
+            <Icon name="ArrowLeftIcon" size={18} />
+            <span className="font-medium">Volver a Países</span>
+          </button>
         </div>
 
         <div className="bg-card rounded-lg border border-border p-6 mb-6">
@@ -1639,6 +1662,24 @@ export default function RequirementsMaintenanceInteractive() {
                       />
                     </div>
 
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">
+                        Contenido
+                      </label>
+                      <textarea
+                        rows={6}
+                        value={legalFormData.Contenido}
+                        onChange={(e) =>
+                          setLegalFormData({
+                            ...legalFormData,
+                            Contenido: e.target.value,
+                          })
+                        }
+                        className="w-full px-4 py-2 border border-input rounded-md bg-background text-foreground resize-y min-h-[140px]"
+                        placeholder="Texto completo o resumen del contenido del articulo"
+                      />
+                    </div>
+
                     <div className="flex items-center justify-end gap-3 pt-2">
                       {editingLegalReference ? (
                         <button
@@ -1729,6 +1770,11 @@ export default function RequirementsMaintenanceInteractive() {
                                 <p className="text-xs text-muted-foreground mt-1">
                                   Modificaciones: {ref.Modificaciones || '—'}
                                 </p>
+                                {ref.Contenido ? (
+                                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                    Contenido: {ref.Contenido}
+                                  </p>
+                                ) : null}
                               </button>
 
                               <div className="flex items-center gap-2">
@@ -1787,6 +1833,11 @@ export default function RequirementsMaintenanceInteractive() {
                       <p className="text-sm text-muted-foreground mt-1">
                         {selectedLegalReference.Ley}
                       </p>
+                      {selectedLegalReference.Contenido ? (
+                        <p className="text-sm text-muted-foreground mt-3 whitespace-pre-line">
+                          {selectedLegalReference.Contenido}
+                        </p>
+                      ) : null}
                     </div>
 
                     {/* Formulario de subida PDF */}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Icon from '@/components/ui/AppIcon';
+import StatusBadge from './StatusBadge';
 import StatusDropdown from './StatusDropdown';
 
 interface ComplianceItem {
@@ -46,7 +47,7 @@ interface ItemsTableProps {
   statusOptions: { id: number; label: string }[];
 
   // Cambio real de estado
-  onStatusChange: (detalleId: number, estadoId: number) => void;
+  onStatusChange: (item: ComplianceItem, estadoId: number) => void;
 
   // Si el usuario no puede editar, solo verá el texto del estado
   canEditStatus?: boolean;
@@ -78,6 +79,40 @@ function formatDisplayDate(value?: string | null) {
 function normalizeText(value?: string | null) {
   const text = String(value || '').trim();
   return text || 'No definido';
+}
+
+function normalizeStatusKey(status?: string | null) {
+  return String(status || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[–—]/g, '-')
+    .replace(/\s*-\s*/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function getStatusRowClass(status: string) {
+  const statusKey = normalizeStatusKey(status);
+
+  switch (statusKey) {
+    case 'cumplido':
+      return 'bg-green-50/70 hover:bg-green-100/80';
+    case 'en tramite':
+      return 'bg-blue-50/70 hover:bg-blue-100/80';
+    case 'incumplido':
+      return 'bg-red-50/70 hover:bg-red-100/80';
+    case 'no aplica':
+      return 'bg-gray-50/80 hover:bg-gray-100/90';
+    case 'no ha sucedido':
+      return 'bg-yellow-50/80 hover:bg-yellow-100/90';
+    case 'terceros-incumplido':
+      return 'bg-orange-50/80 hover:bg-orange-100/90';
+    case 'terceros-cumplido':
+      return 'bg-teal-50/80 hover:bg-teal-100/90';
+    default:
+      return 'hover:bg-muted/50';
+  }
 }
 
 export default function ItemsTable({
@@ -198,18 +233,14 @@ export default function ItemsTable({
 
   const renderStatusCell = (item: ComplianceItem) => {
     if (!canEditStatus) {
-      return (
-        <span className="inline-flex items-center rounded-full border border-border px-2 py-1 text-xs text-foreground bg-muted/30">
-          {getStatusLabel(item)}
-        </span>
-      );
+      return <StatusBadge status={getStatusLabel(item)} />;
     }
 
     return (
       <StatusDropdown
         currentEstadoId={item.estadoId}
         options={statusOptions}
-        onChange={(estadoId: number) => onStatusChange(item.id, estadoId)}
+        onChange={(estadoId: number) => onStatusChange(item, estadoId)}
       />
     );
   };
@@ -322,7 +353,9 @@ export default function ItemsTable({
             {sortedItems.map((item) => (
               <tr
                 key={item.id}
-                className="hover:bg-muted/50 transition-smooth cursor-pointer"
+                className={`${getStatusRowClass(
+                  getStatusLabel(item)
+                )} transition-smooth cursor-pointer`}
                 onClick={() => onItemClick(item)}
               >
                 <td className="px-6 py-4">
@@ -378,7 +411,9 @@ export default function ItemsTable({
         {sortedItems.map((item) => (
           <div
             key={item.id}
-            className="p-4 hover:bg-muted/50 transition-smooth cursor-pointer"
+            className={`p-4 ${getStatusRowClass(
+              getStatusLabel(item)
+            )} transition-smooth cursor-pointer`}
             onClick={() => onItemClick(item)}
           >
             <div className="flex items-start justify-between mb-3">

@@ -201,6 +201,10 @@ export default function CountryManagementInteractive() {
     router.push('/login');
   };
 
+  const handleBackToCountries = () => {
+    router.push('/countries-selection');
+  };
+
   if (!isHydrated) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -231,9 +235,19 @@ export default function CountryManagementInteractive() {
       <main className="container mx-auto px-4 lg:px-6 py-6">
         <BreadcrumbNavigation />
 
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-foreground mb-2">Gestión de Países</h1>
-          <p className="text-muted-foreground">Administre los países y sus configuraciones regionales</p>
+        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground mb-2">Gestión de Países</h1>
+            <p className="text-muted-foreground">Administre los países y sus configuraciones regionales</p>
+          </div>
+
+          <button
+            onClick={handleBackToCountries}
+            className="inline-flex items-center gap-2 px-4 py-2 border border-border text-foreground rounded-md hover:bg-muted transition-smooth"
+          >
+            <Icon name="ArrowLeftIcon" size={18} />
+            <span className="font-medium">Volver a Países</span>
+          </button>
         </div>
 
         <div className="bg-card rounded-lg border border-border p-6 mb-6">
