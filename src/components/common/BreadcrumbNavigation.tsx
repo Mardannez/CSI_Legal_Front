@@ -37,7 +37,7 @@ const BreadcrumbNavigation = ({
       'company-selection': 'Proyectos',
       'company-dashboard': 'Panel de Cumplimiento Legal',
       'country-management': 'Gestión de Países',
-      'project-maintenance': 'Mantenimiento de Proyectos',
+      'project-maintenance': 'Mantenimiento de Empresas',
       'requirements-maintenance': 'Mantenimiento de Requisitos',
       'user-management': 'Mantenimiento de Usuarios',
       'roles-management': 'Mantenimiento de Roles',

@@ -174,22 +174,22 @@ const canViewAdministration = !!safeUser.isGlobalAdmin || isSuperAdminByRole;
           <div className="py-2">
           
           
-            <button
+            {/* <button
               onClick={handleProfileClick}
               className="w-full flex items-center gap-3 px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-smooth"
             >
               <Icon name="UserIcon" size={18} className="text-muted-foreground" />
               <span>Mi Perfil</span>
             </button>
-
-            <button
+            */}
+            {/*<button
               onClick={handleSettingsClick}
               className="w-full flex items-center gap-3 px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-smooth"
             >
               <Icon name="Cog6ToothIcon" size={18} className="text-muted-foreground" />
               <span>Configuración</span>
             </button>
-
+              */}  
             {canViewAdministration && (
           <>
             <Link
@@ -256,7 +256,7 @@ const canViewAdministration = !!safeUser.isGlobalAdmin || isSuperAdminByRole;
                 size={18}
                 className="text-muted-foreground"
               />
-              <span>Gestión de Países</span>
+              <span>Mantenimiento de Países</span>
             </Link>
 
             <Link
@@ -269,7 +269,7 @@ const canViewAdministration = !!safeUser.isGlobalAdmin || isSuperAdminByRole;
                 size={18}
                 className="text-muted-foreground"
               />
-              <span>Mantenimiento de Proyectos</span>
+              <span>Mantenimiento de Empresas</span>
             </Link>
 
             <Link

@@ -342,7 +342,12 @@ export default function CompanyDashboardInteractive() {
         return;
       }
 
-      const nombre = json?.Empresa?.Nombre;
+      const nombre =
+        json?.Empresa?.Empresa ||
+        json?.Empresa?.Nombre ||
+        json?.Empresa?.nombre ||
+        currentEmpresa?.nombre;
+
       setCompanyName(nombre ? String(nombre) : `ID: ${selectedCompany}`);
     } catch {
       setCompanyName(`ID: ${selectedCompany}`);
