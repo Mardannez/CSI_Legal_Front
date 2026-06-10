@@ -1724,6 +1724,16 @@ export default function ItemDetailModal({
                 ) : (
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    
+                    <div>
+                        <label className="block text-sm font-medium text-muted-foreground mb-2">
+                          Descripción
+                        </label>
+                        <p className="text-foreground leading-relaxed">
+                          {displayItem.description}
+                        </p>
+                    </div>
+                    
                       <div>
                         <label className="block text-sm font-medium text-muted-foreground mb-2">
                           Estado
@@ -1768,14 +1778,7 @@ export default function ItemDetailModal({
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-muted-foreground mb-2">
-                        Descripción
-                      </label>
-                      <p className="text-foreground leading-relaxed">
-                        {displayItem.description}
-                      </p>
-                    </div>
+                 
                   </>
                 )}
               </div>
