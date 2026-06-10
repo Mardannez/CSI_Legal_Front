@@ -20,6 +20,15 @@ type ChartSlice = ComplianceData & {
   percentage: number;
 };
 
+type LabelLayout = {
+  index: number;
+  labelX: number;
+  labelY: number;
+  textAnchor: 'start' | 'end';
+  elbowX: number;
+  endX: number;
+};
+
 const STATUS_COLORS: Record<string, string> = {
   cumplido: '#2E7D32',
   'en tramite': '#1976D2',
@@ -202,6 +211,58 @@ export default function ComplianceChart({ data }: ComplianceChartProps) {
         };
       });
   }, [normalizedData, total]);
+
+  const labelLayouts = useMemo<LabelLayout[]>(() => {
+    const cx = 380;
+    const cy = 194;
+    const minY = 42;
+    const maxY = 374;
+    const labelGap = 40;
+
+    const layouts = visibleSlices.map((slice, index) => {
+      const radians = ((slice.midAngle - 90) * Math.PI) / 180;
+      const isRight = Math.cos(radians) >= 0;
+      const desiredY = clamp(cy + Math.sin(radians) * 172, minY, maxY);
+      const labelX = isRight ? 610 : 150;
+      const textAnchor: 'start' | 'end' = isRight ? 'start' : 'end';
+
+      return {
+        index,
+        desiredY,
+        isRight,
+        labelX,
+        labelY: desiredY,
+        textAnchor,
+        elbowX: isRight ? labelX - 52 : labelX + 52,
+        endX: isRight ? labelX - 10 : labelX + 10,
+      };
+    });
+
+    const assignLanes = (isRight: boolean) => {
+      const side = layouts
+        .filter((layout) => layout.isRight === isRight)
+        .sort((a, b) => a.desiredY - b.desiredY);
+
+      let previousY = minY - labelGap;
+
+      side.forEach((layout) => {
+        layout.labelY = Math.max(layout.desiredY, previousY + labelGap);
+        previousY = layout.labelY;
+      });
+
+      const overflow = side.length ? side[side.length - 1].labelY - maxY : 0;
+      if (overflow > 0) {
+        side.forEach((layout) => {
+          layout.labelY = Math.max(minY, layout.labelY - overflow);
+        });
+      }
+    };
+
+    assignLanes(false);
+    assignLanes(true);
+
+    return layouts;
+  }, [visibleSlices]);
 
   if (!isHydrated) {
     return (
@@ -404,12 +465,10 @@ export default function ComplianceChart({ data }: ComplianceChartProps) {
               const ox = Math.cos(radians) * explode;
               const oy = Math.sin(radians) * explode;
               const anchor = polarPoint(cx, cy, rx, ry, slice.midAngle);
-              const labelX = clamp(cx + Math.cos(radians) * 292, 96, 664);
-              const labelY = clamp(cy + Math.sin(radians) * 154, 54, 362);
-              const isRight = labelX >= cx;
-              const textAnchor = isRight ? 'start' : 'end';
-              const elbowX = isRight ? labelX - 44 : labelX + 44;
-              const endX = isRight ? labelX - 8 : labelX + 8;
+              const layout = labelLayouts.find((item) => item.index === index);
+              if (!layout) return null;
+
+              const { labelX, labelY, textAnchor, elbowX, endX } = layout;
               const title = slice.name.length > 23
                 ? `${slice.name.slice(0, 23)}...`
                 : slice.name;
@@ -431,19 +490,11 @@ export default function ComplianceChart({ data }: ComplianceChartProps) {
                     textAnchor={textAnchor}
                     className="fill-foreground text-[13px] font-bold"
                   >
-                    {slice.percentage.toFixed(0)}% de requisitos
+                    {slice.percentage.toFixed(0)}% {title}
                   </text>
                   <text
                     x={labelX}
-                    y={labelY + 4}
-                    textAnchor={textAnchor}
-                    className="fill-foreground text-[12px] font-semibold"
-                  >
-                    {title}
-                  </text>
-                  <text
-                    x={labelX}
-                    y={labelY + 20}
+                    y={labelY + 6}
                     textAnchor={textAnchor}
                     className="fill-muted-foreground text-[10px]"
                   >

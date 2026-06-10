@@ -13,6 +13,8 @@ interface ComplianceItem {
   evaluacionId?: number;
   requisitoId?: number;
   name: string;
+  category?: string | null;
+  Categoria?: string | null;
   description: string;
   status: string;
   responsible: string;
@@ -178,6 +180,63 @@ function formatDateForInput(value?: string | null) {
   if (Number.isNaN(d.getTime())) return '';
 
   return d.toISOString().slice(0, 10);
+}
+
+function resolveRequirementText(x: any, previousItem?: ComplianceItem | null) {
+  const rawName = String(x?.name ?? x?.Nombre ?? x?.Requisito ?? '').trim();
+  const nameLines = rawName
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const bulletParts = rawName
+    .split(/\s+[•]\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const explicitName =
+    x?.requirementName ??
+    x?.nombreRequisito ??
+    x?.NombreRequisito ??
+    x?.requisito ??
+    x?.RequisitoNombre ??
+    x?.Nombre;
+
+  const explicitCategory =
+    x?.category ??
+    x?.categoria ??
+    x?.Categoria ??
+    x?.categoryName ??
+    x?.NombreCategoria ??
+    x?.categoriaNombre ??
+    previousItem?.category ??
+    previousItem?.Categoria;
+
+  let category = String(explicitCategory ?? '').trim();
+  let name = String(explicitName ?? '').trim();
+  const compositeParts = (name || rawName)
+    .split(/\s+(?:•|â€¢)\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (compositeParts.length > 1 && (!category || category === compositeParts[0])) {
+    category = category || compositeParts[0];
+    name = compositeParts.slice(1).join(' • ');
+  }
+
+  if (!category && !name && bulletParts.length > 1) {
+    category = bulletParts[0];
+    name = bulletParts.slice(1).join(' • ');
+  }
+
+  if (!category && !name && nameLines.length > 1) {
+    category = nameLines[0];
+    name = nameLines.slice(1).join(' ');
+  }
+
+  return {
+    name: name || rawName || previousItem?.name || '',
+    category,
+  };
 }
 
 function guessTypeFromName(name: string) {
@@ -402,9 +461,13 @@ export default function ItemDetailModal({
 
   useEffect(() => {
     if (isOpen) {
+      const normalizedItem = item
+        ? { ...item, ...resolveRequirementText(item, item) }
+        : item;
+
       document.body.style.overflow = 'hidden';
-      setEditedItem(item);
-      setInfoSnapshot(item);
+      setEditedItem(normalizedItem);
+      setInfoSnapshot(normalizedItem);
       setIsEditMode(false);
       setActiveTab('info');
       setToast(null);
@@ -510,6 +573,7 @@ export default function ItemDetailModal({
     info: any,
     previousItem: ComplianceItem
   ): ComplianceItem => {
+    const requirementText = resolveRequirementText(info, previousItem);
     const fechaPlanificadaRaw =
       info?.fechaPlanificada ?? info?.FechaPlanificada ?? null;
 
@@ -531,13 +595,8 @@ export default function ItemDetailModal({
       requisitoId:
         Number(info?.requisitoId ?? info?.IdRequisito) ||
         previousItem.requisitoId,
-      name: String(
-        info?.name ??
-          info?.nombreRequisito ??
-          info?.Titulo ??
-          previousItem.name ??
-          ''
-      ),
+      name: requirementText.name,
+      category: requirementText.category,
       description: String(
         info?.description ??
           info?.descripcion ??
@@ -1260,6 +1319,7 @@ export default function ItemDetailModal({
   if (!isOpen || !isHydrated || !item) return null;
 
   const displayItem = editedItem || item;
+  const displayRequirement = resolveRequirementText(displayItem, displayItem);
 
   const tabs = [
     { id: 'info' as TabType, label: 'Información', icon: 'InformationCircleIcon' },
@@ -1516,8 +1576,13 @@ export default function ItemDetailModal({
           <div className="flex items-center justify-between px-6 py-4 border-b border-border">
             <div className="flex-1">
               <h2 className="text-xl font-semibold text-foreground">
-                {displayItem.name}
+                {displayRequirement.name}
               </h2>
+              {displayRequirement.category && (
+                <p className="text-sm text-foreground mt-1">
+                  {displayRequirement.category}
+                </p>
+              )}
               <p className="text-sm text-muted-foreground mt-1">ID: {item.id}</p>
             </div>
 
@@ -1571,7 +1636,7 @@ export default function ItemDetailModal({
                       </label>
                       <input
                         type="text"
-                        value={editedItem?.name || ''}
+                        value={displayRequirement.name}
                         disabled
                         className="w-full px-4 py-2 border border-input rounded-md bg-muted text-muted-foreground cursor-not-allowed"
                       />
@@ -1580,6 +1645,20 @@ export default function ItemDetailModal({
                       </p>
                     </div>
 
+                    {displayRequirement.category && (
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-2">
+                          Categoría
+                        </label>
+                        <input
+                          type="text"
+                          value={displayRequirement.category}
+                          disabled
+                          className="w-full px-4 py-2 border border-input rounded-md bg-muted text-muted-foreground cursor-not-allowed"
+                        />
+                      </div>
+                    )}
+
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-2">
                         Descripción <span className="text-error">*</span>
@@ -1587,8 +1666,8 @@ export default function ItemDetailModal({
                       <textarea
                         value={editedItem?.description || ''}
                         disabled
-                        rows={4}
-                        className="w-full px-4 py-2 border border-input rounded-md bg-muted text-muted-foreground cursor-not-allowed transition-smooth resize-none"
+                        rows={6}
+                        className="w-full px-4 py-2 border border-input rounded-md bg-muted text-muted-foreground cursor-not-allowed transition-smooth resize-none whitespace-pre-wrap"
                       />
                       <p className="text-xs text-muted-foreground mt-1">
                         Este campo pertenece al catálogo del requisito y no se edita desde la evaluación.
@@ -1723,17 +1802,16 @@ export default function ItemDetailModal({
                   </>
                 ) : (
                   <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    
                     <div>
-                        <label className="block text-sm font-medium text-muted-foreground mb-2">
-                          Descripción
-                        </label>
-                        <p className="text-foreground leading-relaxed">
-                          {displayItem.description}
-                        </p>
+                      <label className="block text-sm font-medium text-muted-foreground mb-2">
+                        Descripción
+                      </label>
+                      <p className="text-foreground leading-relaxed whitespace-pre-wrap break-words">
+                        {displayItem.description}
+                      </p>
                     </div>
-                    
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                       <div>
                         <label className="block text-sm font-medium text-muted-foreground mb-2">
                           Estado
@@ -1777,8 +1855,6 @@ export default function ItemDetailModal({
                         </p>
                       </div>
                     </div>
-
-                 
                   </>
                 )}
               </div>

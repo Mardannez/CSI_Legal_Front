@@ -25,6 +25,7 @@ interface DashboardItem {
   evaluacionId: number; // id de EvaluacionEncabezado
   requisitoId: number; // id de Requisito
   name: string;
+  category: string;
   description: string;
   estadoId: number; // IdEstadoRequisito real
   status: string; // texto del estado
@@ -53,6 +54,7 @@ interface ChartSlice {
 
 interface ActiveFilters {
   status: string;
+  category: string;
   responsible: string;
   periodicity: string;
 }
@@ -79,6 +81,53 @@ function formatDateInput(value: unknown) {
   const day = String(d.getDate()).padStart(2, '0');
 
   return `${year}-${month}-${day}`;
+}
+
+function resolveRequirementText(x: any) {
+  const rawName = String(x.name ?? x.Nombre ?? x.Requisito ?? '').trim();
+  const nameLines = rawName
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const explicitName =
+    x.requirementName ??
+    x.nombreRequisito ??
+    x.NombreRequisito ??
+    x.requisito ??
+    x.RequisitoNombre ??
+    x.Nombre;
+
+  const explicitCategory =
+    x.category ??
+    x.categoria ??
+    x.Categoria ??
+    x.categoryName ??
+    x.NombreCategoria ??
+    x.categoriaNombre;
+
+  let category = String(
+    explicitCategory ?? (nameLines.length > 1 ? nameLines[0] : '')
+  ).trim();
+
+  let name = String(
+    explicitName ??
+      (nameLines.length > 1 ? nameLines.slice(1).join(' ') : rawName)
+  ).trim();
+  const compositeParts = name
+    .split(/\s+(?:•|â€¢)\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (compositeParts.length > 1 && (!category || category === compositeParts[0])) {
+    category = category || compositeParts[0];
+    name = compositeParts.slice(1).join(' • ');
+  }
+
+  return {
+    name: name || rawName,
+    category,
+  };
 }
 
 export default function CompanyDashboardInteractive() {
@@ -292,6 +341,7 @@ export default function CompanyDashboardInteractive() {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>({
     status: '',
+    category: '',
     responsible: '',
     periodicity: '',
   });
@@ -476,22 +526,26 @@ export default function CompanyDashboardInteractive() {
 
       const apiItems = Array.isArray(json?.Items) ? json.Items : [];
 
-      const normalized: DashboardItem[] = apiItems.map((x: any) => ({
-        id: Number(x.id),
-        evaluacionId: Number(x.evaluacionId),
-        requisitoId: Number(x.requisitoId),
-        name: String(x.name ?? ''),
-        description: String(x.description ?? ''),
-        estadoId: Number(x.estadoId),
-        status: String(x.status ?? ''),
-        responsible: String(x.responsible ?? x.responsable ?? 'No definido'),
-        plannedDate: String(
-          x.plannedDate ?? x.fechaPlanificada ?? 'No definido'
-        ),
-        periodicity: String(x.periodicity ?? x.periocidad ?? 'No definido'),
-        lastUpdate: String(
-          x.lastUpdate ?? x.ultimaActualizacion ?? x.UltimaActualizacion ?? ''
-        ),
+      const normalized: DashboardItem[] = apiItems.map((x: any) => {
+        const requirementText = resolveRequirementText(x);
+
+        return {
+          id: Number(x.id),
+          evaluacionId: Number(x.evaluacionId),
+          requisitoId: Number(x.requisitoId),
+          name: requirementText.name,
+          category: requirementText.category,
+          description: String(x.description ?? ''),
+          estadoId: Number(x.estadoId),
+          status: String(x.status ?? ''),
+          responsible: String(x.responsible ?? x.responsable ?? 'No definido'),
+          plannedDate: String(
+            x.plannedDate ?? x.fechaPlanificada ?? 'No definido'
+          ),
+          periodicity: String(x.periodicity ?? x.periocidad ?? 'No definido'),
+          lastUpdate: String(
+            x.lastUpdate ?? x.ultimaActualizacion ?? x.UltimaActualizacion ?? ''
+          ),
 
         // ==========================================================
         // CAMPOS DEL DETALLE DE EVALUACIÓN
@@ -499,13 +553,17 @@ export default function CompanyDashboardInteractive() {
         // e ItemDetailModal puedan mostrar los valores reales guardados
         // en EvaluacionDetalle.
         // ==========================================================
-        responsable: x.responsable ?? x.responsible ?? null,
-        fechaPlanificada: x.fechaPlanificada ?? x.plannedDate ?? null,
-        idPeriocidad: x.idPeriocidad ?? x.IdPeriocidad ?? null,
-        periocidad: x.periocidad ?? x.periodicity ?? null,
-        ultimaActualizacion:
-          x.ultimaActualizacion ?? x.UltimaActualizacion ?? x.lastUpdate ?? null,
-      }));
+          responsable: x.responsable ?? x.responsible ?? null,
+          fechaPlanificada: x.fechaPlanificada ?? x.plannedDate ?? null,
+          idPeriocidad: x.idPeriocidad ?? x.IdPeriocidad ?? null,
+          periocidad: x.periocidad ?? x.periodicity ?? null,
+          ultimaActualizacion:
+            x.ultimaActualizacion ??
+            x.UltimaActualizacion ??
+            x.lastUpdate ??
+            null,
+        };
+      });
 
       setItems(normalized);
 
@@ -819,12 +877,16 @@ export default function CompanyDashboardInteractive() {
       const matchesSearch =
         searchTerm === '' ||
         item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (item.description || '')
           .toLowerCase()
           .includes(searchTerm.toLowerCase());
 
       const matchesStatus =
         activeFilters.status === '' || item.status === activeFilters.status;
+      const matchesCategory =
+        activeFilters.category === '' ||
+        item.category === activeFilters.category;
       const matchesResponsible =
         activeFilters.responsible === '' ||
         item.responsible === activeFilters.responsible;
@@ -835,6 +897,7 @@ export default function CompanyDashboardInteractive() {
       return (
         matchesSearch &&
         matchesStatus &&
+        matchesCategory &&
         matchesResponsible &&
         matchesPeriodicity
       );
@@ -851,6 +914,9 @@ export default function CompanyDashboardInteractive() {
   const filterOptions = useMemo(
     () => ({
       status: Array.from(new Set(items.map((i) => i.status))).filter(Boolean),
+      category: Array.from(new Set(items.map((i) => i.category))).filter(
+        Boolean
+      ),
       responsible: Array.from(new Set(items.map((i) => i.responsible))).filter(
         Boolean
       ),
@@ -1239,7 +1305,6 @@ export default function CompanyDashboardInteractive() {
             totalPages={totalPages}
             onPageChange={(p) => {
               setCurrentPage(p);
-              window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
             onItemClick={(item) => {
               setSelectedItem(item);

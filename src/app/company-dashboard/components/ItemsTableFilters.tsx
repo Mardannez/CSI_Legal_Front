@@ -5,6 +5,7 @@ import Icon from '@/components/ui/AppIcon';
 
 interface FilterOptions {
   status: string[];
+  category: string[];
   responsible: string[];
   periodicity: string[];
 }
@@ -17,6 +18,7 @@ interface ItemsTableFiltersProps {
 
 interface ActiveFilters {
   status: string;
+  category: string;
   responsible: string;
   periodicity: string;
 }
@@ -30,6 +32,7 @@ export default function ItemsTableFilters({
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>({
     status: '',
+    category: '',
     responsible: '',
     periodicity: '',
   });
@@ -59,7 +62,12 @@ export default function ItemsTableFilters({
   };
 
   const clearFilters = () => {
-    const emptyFilters = { status: '', responsible: '', periodicity: '' };
+    const emptyFilters = {
+      status: '',
+      category: '',
+      responsible: '',
+      periodicity: '',
+    };
     setActiveFilters(emptyFilters);
     setSearchTerm('');
     onFilterChange(emptyFilters);
@@ -101,7 +109,7 @@ export default function ItemsTableFilters({
 
       {showFilters && (
         <div className="mt-4 pt-4 border-t border-border">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">
                 Estado
@@ -115,6 +123,24 @@ export default function ItemsTableFilters({
                 {filterOptions.status.map((status) => (
                   <option key={status} value={status}>
                     {status}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Categoría
+              </label>
+              <select
+                value={activeFilters.category}
+                onChange={(e) => handleFilterChange('category', e.target.value)}
+                className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-smooth"
+              >
+                <option value="">Todas las categorías</option>
+                {filterOptions.category.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
                   </option>
                 ))}
               </select>

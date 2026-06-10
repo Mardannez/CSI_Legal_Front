@@ -10,6 +10,8 @@ interface ComplianceItem {
   evaluacionId?: number;
   requisitoId?: number; // IMPORTANTE: se usará en el modal para cargar referencias legales
   name: string;
+  category?: string | null;
+  Categoria?: string | null;
   description: string;
   estadoId: number;
   status: string;
@@ -115,6 +117,25 @@ function getStatusRowClass(status: string) {
   }
 }
 
+function getVisiblePageNumbers(currentPage: number, totalPages: number) {
+  const maxVisiblePages = 5;
+
+  if (totalPages <= maxVisiblePages) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  const halfWindow = Math.floor(maxVisiblePages / 2);
+  let start = Math.max(1, currentPage - halfWindow);
+  let end = start + maxVisiblePages - 1;
+
+  if (end > totalPages) {
+    end = totalPages;
+    start = end - maxVisiblePages + 1;
+  }
+
+  return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+}
+
 export default function ItemsTable({
   items,
   currentPage,
@@ -201,6 +222,10 @@ export default function ItemsTable({
     return normalizeText(normalizedPeriodicity);
   };
 
+  const getCategoryText = (item: ComplianceItem) => {
+    return String(item.category ?? item.Categoria ?? '').trim();
+  };
+
   const getSortableValue = (item: ComplianceItem, key: keyof ComplianceItem) => {
     if (key === 'responsible') return getResponsibleText(item);
     if (key === 'plannedDate') return getPlannedDateText(item);
@@ -221,6 +246,8 @@ export default function ItemsTable({
     if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
     return 0;
   });
+
+  const visiblePageNumbers = getVisiblePageNumbers(currentPage, totalPages);
 
   // Si no puede editar, mostramos etiqueta. Si puede, dropdown.
   const getStatusLabel = (item: ComplianceItem) => {
@@ -360,7 +387,14 @@ export default function ItemsTable({
               >
                 <td className="px-6 py-4">
                   <div>
-                    <p className="whitespace-pre-line">{item.name}</p>
+                    <p className="font-semibold text-foreground whitespace-pre-line">
+                      {item.name}
+                    </p>
+                    {getCategoryText(item) && (
+                      <p className="text-sm text-muted-foreground mt-1 whitespace-pre-line">
+                        {getCategoryText(item)}
+                      </p>
+                    )}
                     <p className="text-xs text-muted-foreground font-caption mt-1 line-clamp-1">
                       {item.description}
                     </p>
@@ -421,6 +455,11 @@ export default function ItemsTable({
                 <h4 className="text-sm font-semibold text-foreground mb-1 whitespace-pre-line">
                   {item.name}
                 </h4>
+                {getCategoryText(item) && (
+                  <p className="text-xs text-muted-foreground mb-1 whitespace-pre-line">
+                    {getCategoryText(item)}
+                  </p>
+                )}
                 <p className="text-xs text-muted-foreground font-caption line-clamp-2">
                   {item.description}
                 </p>
@@ -482,24 +521,69 @@ export default function ItemsTable({
 
       {totalPages > 1 && (
         <div className="px-6 py-4 border-t border-border bg-muted/30">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground font-caption">
               Página {currentPage} de {totalPages}
             </p>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => onPageChange(currentPage - 1)}
                 disabled={currentPage === 1}
                 className="p-2 text-foreground border border-input rounded-md hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-smooth"
+                title="Pagina anterior"
               >
                 <Icon name="ChevronLeftIcon" size={20} />
               </button>
+
+              {visiblePageNumbers[0] > 1 ? (
+                <>
+                  <button
+                    onClick={() => onPageChange(1)}
+                    className="min-w-10 h-10 px-3 text-sm font-medium text-foreground border border-input rounded-md hover:bg-muted transition-smooth"
+                  >
+                    1
+                  </button>
+                  {visiblePageNumbers[0] > 2 ? (
+                    <span className="px-1 text-sm text-muted-foreground">...</span>
+                  ) : null}
+                </>
+              ) : null}
+
+              {visiblePageNumbers.map((pageNumber) => (
+                <button
+                  key={pageNumber}
+                  onClick={() => onPageChange(pageNumber)}
+                  aria-current={pageNumber === currentPage ? 'page' : undefined}
+                  className={`min-w-10 h-10 px-3 text-sm font-medium rounded-md border transition-smooth ${
+                    pageNumber === currentPage
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-input text-foreground hover:bg-muted'
+                  }`}
+                >
+                  {pageNumber}
+                </button>
+              ))}
+
+              {visiblePageNumbers[visiblePageNumbers.length - 1] < totalPages ? (
+                <>
+                  {visiblePageNumbers[visiblePageNumbers.length - 1] < totalPages - 1 ? (
+                    <span className="px-1 text-sm text-muted-foreground">...</span>
+                  ) : null}
+                  <button
+                    onClick={() => onPageChange(totalPages)}
+                    className="min-w-10 h-10 px-3 text-sm font-medium text-foreground border border-input rounded-md hover:bg-muted transition-smooth"
+                  >
+                    {totalPages}
+                  </button>
+                </>
+              ) : null}
 
               <button
                 onClick={() => onPageChange(currentPage + 1)}
                 disabled={currentPage === totalPages}
                 className="p-2 text-foreground border border-input rounded-md hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-smooth"
+                title="Pagina siguiente"
               >
                 <Icon name="ChevronRightIcon" size={20} />
               </button>
