@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Icon from '@/components/ui/AppIcon';
 import StatusBadge from './StatusBadge';
 import NewEvidenceModal from './NewEvidenceModal';
+import PdfCanvasViewer from '@/components/common/PdfCanvasViewer';
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -44,6 +45,7 @@ interface ItemDetailModalProps {
   // EMPRESA_LECTOR debe venir en false desde el dashboard.
   // ==========================================================
   canEdit?: boolean;
+  canCreateEvidence?: boolean;
   canDownloadFiles?: boolean;
 }
 
@@ -117,10 +119,22 @@ interface AssignedResponsible {
 
 interface AuditEntry {
   id: number;
+  type: 'info' | 'estado' | 'evidencia' | 'evento' | 'responsable';
   date: string;
   user: string;
   action: string;
   details: string;
+  responsable?: string;
+  fechaPlanificada?: string;
+  periodicidad?: string;
+  estadoNuevo?: string;
+  idEvidencia?: number | null;
+  fechaEvidencia?: string;
+  idEvento?: number | null;
+  fechaEvento?: string;
+  idResponsableRequisito?: number | null;
+  responsableCorreo?: string;
+  observaciones?: string;
 }
 
 type ToastVariant = 'loading' | 'success' | 'error' | 'info';
@@ -307,6 +321,7 @@ export default function ItemDetailModal({
   onClose,
   onSave,
   canEdit = false,
+  canCreateEvidence = false,
   canDownloadFiles = false,
 }: ItemDetailModalProps) {
   const [isHydrated, setIsHydrated] = useState(false);
@@ -416,17 +431,13 @@ export default function ItemDetailModal({
   });
 
   // ==========================================================
-  // AUDITORÍA MOCK
+  // HISTORIAL DE AUDITORIA
   // ==========================================================
-  const [auditHistory] = useState<AuditEntry[]>([
-    {
-      id: 1,
-      date: '10/02/2026 14:30',
-      user: 'María González',
-      action: 'Actualización de estado',
-      details: 'Estado cambiado de "En trámite" a "Cumplido"',
-    },
-  ]);
+  const [auditHistory, setAuditHistory] = useState<AuditEntry[]>([]);
+  const [loadingAuditHistory, setLoadingAuditHistory] = useState(false);
+  const [auditHistoryError, setAuditHistoryError] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     setIsHydrated(true);
@@ -458,6 +469,43 @@ export default function ItemDetailModal({
       });
     };
   }, []);
+
+  useEffect(() => {
+    if (!pdfViewer) return;
+
+    const blockEvent = (event: Event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    const blockKeyboard = (event: KeyboardEvent) => {
+      const key = event.key?.toLowerCase?.() || '';
+      const hasModifier = event.ctrlKey || event.metaKey;
+
+      if (
+        (hasModifier && ['a', 'c', 'p', 's', 'u', 'x'].includes(key)) ||
+        key === 'printscreen'
+      ) {
+        blockEvent(event);
+      }
+    };
+
+    document.addEventListener('contextmenu', blockEvent, true);
+    document.addEventListener('copy', blockEvent, true);
+    document.addEventListener('cut', blockEvent, true);
+    document.addEventListener('paste', blockEvent, true);
+    document.addEventListener('dragstart', blockEvent, true);
+    document.addEventListener('keydown', blockKeyboard, true);
+
+    return () => {
+      document.removeEventListener('contextmenu', blockEvent, true);
+      document.removeEventListener('copy', blockEvent, true);
+      document.removeEventListener('cut', blockEvent, true);
+      document.removeEventListener('paste', blockEvent, true);
+      document.removeEventListener('dragstart', blockEvent, true);
+      document.removeEventListener('keydown', blockKeyboard, true);
+    };
+  }, [pdfViewer]);
 
   useEffect(() => {
     if (isOpen) {
@@ -496,6 +544,9 @@ export default function ItemDetailModal({
 
       setEvents([]);
       setEventsError(null);
+      setAuditHistory([]);
+      setAuditHistoryError(null);
+      setLoadingAuditHistory(false);
       setShowAddEventForm(false);
       setSavingEvent(false);
       setDeletingEventId(null);
@@ -561,6 +612,339 @@ export default function ItemDetailModal({
     }
 
     return json;
+  };
+
+  const resolvePeriodicityName = (value?: number | string | null) => {
+    if (!value) return 'No definido';
+
+    const option = periodicityOptions.find(
+      (periodicity) => periodicity.id === Number(value)
+    );
+
+    return option?.name || String(value);
+  };
+
+  const mapAuditRowToEntry = (row: any): AuditEntry => {
+    const responsable =
+      row?.detalle?.responsable ??
+      row?.Responsable ??
+      row?.responsable ??
+      'No definido';
+
+    const fechaPlanificada =
+      row?.detalle?.fechaPlanificada ??
+      row?.FechaPlanificada ??
+      row?.fechaPlanificada ??
+      null;
+
+    const periodicidad =
+      row?.detalle?.periodicidad ??
+      row?.Periodicidad ??
+      row?.periodicidad ??
+      row?.Periocidad ??
+      row?.periocidad ??
+      resolvePeriodicityName(row?.IdPeriocidad ?? row?.idPeriocidad);
+
+    const fechaTexto = fechaPlanificada
+      ? formatApiDate(String(fechaPlanificada))
+      : 'No definido';
+    const fallbackUser = `Usuario #${row?.IdUsuario ?? row?.idUsuario ?? ''}`.trim();
+    const user =
+      (
+      row?.usuarioRegistro ??
+      row?.UsuarioRegistro ??
+      row?.usuario ??
+      row?.Usuario ??
+      fallbackUser
+      ) ||
+      'Usuario';
+
+    return {
+      id: Number(row?.id ?? row?.IdAuditoria ?? row?.IdAuditoriaRequisito ?? Date.now()),
+      type: 'info',
+      date: String(row?.fechaRegistro ?? row?.FechaRegistro ?? ''),
+      user: String(user),
+      action: 'Edicion de Requisito',
+      details: `Se actualizo la informacion del requisito. Responsable: ${responsable}. Fecha planificada: ${fechaTexto}. Periodicidad: ${periodicidad}.`,
+      responsable: String(responsable),
+      fechaPlanificada: fechaTexto,
+      periodicidad: String(periodicidad),
+    };
+  };
+
+  const mapAuditEstadoRowToEntry = (row: any): AuditEntry => {
+    const estadoNuevo =
+      row?.EstadoNuevo ??
+      row?.estadoNuevo ??
+      row?.detalle?.estadoNuevo ??
+      'No definido';
+
+    const user =
+      row?.Usuario ??
+      row?.usuario ??
+      row?.usuarioRegistro ??
+      row?.UsuarioRegistro ??
+      row?.usuario?.nombreCompleto ??
+      row?.usuario?.usuario ??
+      'Usuario';
+
+    return {
+      id: Number(row?.id ?? row?.IdAuditoriaEstado ?? Date.now()),
+      type: 'estado',
+      date: String(row?.FechaRegistro ?? row?.fechaRegistro ?? ''),
+      user: String(user),
+      action: 'Actualizacion de estado',
+      details: String(
+        row?.Descripcion ??
+          row?.descripcion ??
+          `Se modifico el requisito al estado ${estadoNuevo}.`
+      ),
+      estadoNuevo: String(estadoNuevo),
+    };
+  };
+
+  const mapAuditEvidenciaRowToEntry = (row: any): AuditEntry => {
+    const idEvidencia =
+      row?.detalle?.idEvidencia ??
+      row?.IdEvidencia ??
+      row?.idEvidencia ??
+      null;
+    const fechaEvidencia =
+      row?.detalle?.fechaEvidencia ??
+      row?.FechaEvidencia ??
+      row?.fechaEvidencia ??
+      null;
+
+    return {
+      id: Number(row?.id ?? row?.IdAuditoriaEvidencia ?? idEvidencia ?? Date.now()),
+      type: 'evidencia',
+      date: String(row?.fechaRegistro ?? row?.FechaRegistro ?? ''),
+      user: String(
+        row?.usuarioRegistro ??
+          row?.UsuarioRegistro ??
+          row?.Usuario ??
+          row?.usuario ??
+          'Usuario'
+      ),
+      action: String(row?.titulo ?? row?.Titulo ?? 'Auditoria de evidencia'),
+      details: String(row?.descripcion ?? row?.Descripcion ?? ''),
+      idEvidencia: idEvidencia ? Number(idEvidencia) : null,
+      fechaEvidencia: fechaEvidencia ? formatApiDate(String(fechaEvidencia)) : '',
+    };
+  };
+
+  const mapAuditEventoRowToEntry = (row: any): AuditEntry => {
+    const idEvento = row?.IdEvento ?? row?.idEvento ?? null;
+    const fechaEvento = row?.FechaEvento ?? row?.fechaEvento ?? null;
+
+    return {
+      id: Number(row?.id ?? row?.IdAuditoriaEvento ?? idEvento ?? Date.now()),
+      type: 'evento',
+      date: String(row?.FechaRegistro ?? row?.fechaRegistro ?? ''),
+      user: String(
+        row?.Usuario ??
+          row?.usuario ??
+          row?.usuarioRegistro ??
+          row?.UsuarioRegistro ??
+          'Usuario'
+      ),
+      action: 'Auditoria de evento',
+      details: String(
+        row?.Observacion ??
+          row?.observacion ??
+          row?.Descripcion ??
+          row?.descripcion ??
+          ''
+      ),
+      idEvento: idEvento ? Number(idEvento) : null,
+      fechaEvento: fechaEvento ? formatApiDate(String(fechaEvento)) : '',
+    };
+  };
+
+  const mapAuditResponsableRowToEntry = (row: any): AuditEntry => {
+    const detalle = row?.detalle || {};
+    const idResponsableRequisito =
+      detalle?.idResponsableRequisito ??
+      row?.IdResponsableRequisito ??
+      row?.idResponsableRequisito ??
+      null;
+    const responsable =
+      detalle?.responsable ??
+      row?.Responsable ??
+      row?.responsable ??
+      'No definido';
+    const correo =
+      detalle?.correo ?? row?.Correo ?? row?.correo ?? '';
+    const observaciones =
+      detalle?.observaciones ??
+      row?.Observaciones ??
+      row?.observaciones ??
+      row?.descripcion ??
+      row?.Descripcion ??
+      '';
+
+    return {
+      id: Number(
+        row?.id ??
+          row?.IdAuditoriaResponsable ??
+          idResponsableRequisito ??
+          Date.now()
+      ),
+      type: 'responsable',
+      date: String(row?.fechaRegistro ?? row?.FechaRegistro ?? ''),
+      user: String(
+        row?.usuarioRegistro ??
+          row?.UsuarioRegistro ??
+          row?.Usuario ??
+          row?.usuario ??
+          'Usuario'
+      ),
+      action: String(row?.titulo ?? row?.Titulo ?? 'Auditoria de responsable'),
+      details: String(row?.descripcion ?? row?.Descripcion ?? observaciones),
+      idResponsableRequisito: idResponsableRequisito
+        ? Number(idResponsableRequisito)
+        : null,
+      responsable: String(responsable),
+      responsableCorreo: String(correo),
+      observaciones: String(observaciones),
+    };
+  };
+
+  const loadAuditHistory = async (detalleId: number) => {
+    setLoadingAuditHistory(true);
+    setAuditHistoryError(null);
+
+    try {
+      const [
+        infoResult,
+        estadosResult,
+        evidenciasResult,
+        eventosResult,
+        responsablesResult,
+      ] = await Promise.allSettled([
+          fetchJson(`${API_URL}/api/Auditoriaevaluacion/requisito/${detalleId}`),
+          fetchJson(
+            `${API_URL}/api/Auditoriaevaluacion/estados-requisito/${detalleId}`
+          ),
+          fetchJson(`${API_URL}/api/Auditoriaevaluacion/evidencias/${detalleId}`),
+          fetchJson(`${API_URL}/api/Auditoriaevaluacion/eventos/${detalleId}`),
+          fetchJson(
+            `${API_URL}/api/Auditoriaevaluacion/responsables/${detalleId}`
+          ),
+        ]);
+
+      const nextHistory: AuditEntry[] = [];
+      const errors: string[] = [];
+
+      if (infoResult.status === 'fulfilled') {
+        const json = infoResult.value;
+        const rows = Array.isArray(json?.AuditoriaRequisito)
+          ? json.AuditoriaRequisito
+          : Array.isArray(json?.data)
+            ? json.data
+            : Array.isArray(json)
+              ? json
+              : [];
+
+        nextHistory.push(...rows.map(mapAuditRowToEntry));
+      } else {
+        errors.push(
+          infoResult.reason?.message || 'Error cargando auditoria de requisito'
+        );
+      }
+
+      if (estadosResult.status === 'fulfilled') {
+        const json = estadosResult.value;
+        const rows = Array.isArray(json?.AuditoriaEstadosRequisito)
+          ? json.AuditoriaEstadosRequisito
+          : Array.isArray(json?.HistorialAuditoriaEstados)
+            ? json.HistorialAuditoriaEstados
+            : Array.isArray(json?.data)
+              ? json.data
+              : Array.isArray(json)
+                ? json
+                : [];
+
+        nextHistory.push(...rows.map(mapAuditEstadoRowToEntry));
+      } else {
+        errors.push(
+          estadosResult.reason?.message || 'Error cargando auditoria de estados'
+        );
+      }
+
+      if (evidenciasResult.status === 'fulfilled') {
+        const json = evidenciasResult.value;
+        const rows = Array.isArray(json?.HistorialAuditoriaEvidencias)
+          ? json.HistorialAuditoriaEvidencias
+          : Array.isArray(json?.AuditoriaEvidencias)
+            ? json.AuditoriaEvidencias
+            : Array.isArray(json?.data)
+              ? json.data
+              : Array.isArray(json)
+                ? json
+                : [];
+
+        nextHistory.push(...rows.map(mapAuditEvidenciaRowToEntry));
+      } else {
+        errors.push(
+          evidenciasResult.reason?.message ||
+            'Error cargando auditoria de evidencias'
+        );
+      }
+
+      if (eventosResult.status === 'fulfilled') {
+        const json = eventosResult.value;
+        const rows = Array.isArray(json?.AuditoriaEventos)
+          ? json.AuditoriaEventos
+          : Array.isArray(json?.HistorialAuditoriaEventos)
+            ? json.HistorialAuditoriaEventos
+            : Array.isArray(json?.data)
+              ? json.data
+              : Array.isArray(json)
+                ? json
+                : [];
+
+        nextHistory.push(...rows.map(mapAuditEventoRowToEntry));
+      } else {
+        errors.push(
+          eventosResult.reason?.message || 'Error cargando auditoria de eventos'
+        );
+      }
+
+      if (responsablesResult.status === 'fulfilled') {
+        const json = responsablesResult.value;
+        const rows = Array.isArray(json?.HistorialAuditoriaResponsables)
+          ? json.HistorialAuditoriaResponsables
+          : Array.isArray(json?.AuditoriaResponsables)
+            ? json.AuditoriaResponsables
+            : Array.isArray(json?.data)
+              ? json.data
+              : Array.isArray(json)
+                ? json
+                : [];
+
+        nextHistory.push(...rows.map(mapAuditResponsableRowToEntry));
+      } else {
+        errors.push(
+          responsablesResult.reason?.message ||
+            'Error cargando auditoria de responsables'
+        );
+      }
+
+      nextHistory.sort((a, b) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        return (Number.isNaN(dateB) ? 0 : dateB) - (Number.isNaN(dateA) ? 0 : dateA);
+      });
+
+      setAuditHistory(nextHistory);
+      setAuditHistoryError(nextHistory.length === 0 ? errors[0] || null : null);
+    } catch (e: any) {
+      setAuditHistoryError(e?.message || 'Error cargando historial de auditoria');
+      setAuditHistory([]);
+    } finally {
+      setLoadingAuditHistory(false);
+    }
   };
 
   // ==========================================================
@@ -1179,6 +1563,14 @@ export default function ItemDetailModal({
     if (canEdit) loadAvailableResponsibles(item.id);
   }, [activeTab, isOpen, item, canEdit]);
 
+  useEffect(() => {
+    if (!isOpen || !item) return;
+    if (activeTab !== 'audit') return;
+    if (!item.id) return;
+
+    loadAuditHistory(item.id);
+  }, [activeTab, isOpen, item]);
+
   //--UseEffect para controlar si usuarios de empresas con solo lectura no puedan ver el boton de editar ---//
     useEffect(() => {
       if (!canEdit) {
@@ -1385,6 +1777,15 @@ export default function ItemDetailModal({
       const info = json?.Informacion || json?.Detalle || json?.data || json;
       const updatedItem = mapDetalleInformacionToItem(info, editedItem);
 
+      try {
+        await loadAuditHistory(updatedItem.id);
+      } catch (auditLoadError: any) {
+        console.warn(
+          '[ItemDetailModal] audit reload error:',
+          auditLoadError?.message || auditLoadError
+        );
+      }
+
       setEditedItem(updatedItem);
       setInfoSnapshot(updatedItem);
       onSave(updatedItem);
@@ -1583,7 +1984,10 @@ export default function ItemDetailModal({
                   {displayRequirement.category}
                 </p>
               )}
-              <p className="text-sm text-muted-foreground mt-1">ID: {item.id}</p>
+              {/* Usamos el ID del requisito de catálogo para que sea consistente entre empresas; item.id es EvaluacionDetalle. */}
+              <p className="text-sm text-muted-foreground mt-1">
+                Requisito: #{displayItem.requisitoId || item.requisitoId || '—'}
+              </p>
             </div>
 
             <div className="flex items-center gap-2">
@@ -2048,7 +2452,7 @@ export default function ItemDetailModal({
             {activeTab === 'evidence' && (
               <div className="flex gap-6 h-[500px]">
                 <div className="w-1/3 flex flex-col border-r border-border pr-6">
-                  {canEdit ? (
+                  {canCreateEvidence ? (
                     <button
                       onClick={() => setShowNewEvidenceModal(true)}
                       className="w-full px-4 py-3 mb-4 text-sm font-medium text-primary border-2 border-primary rounded-md hover:bg-primary/10 transition-smooth flex items-center justify-center gap-2"
@@ -2441,30 +2845,122 @@ export default function ItemDetailModal({
 
             {activeTab === 'audit' && (
               <div className="space-y-4">
-                {auditHistory.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="border border-border rounded-lg p-4 bg-background"
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <h4 className="font-medium text-foreground">
-                          {entry.action}
-                        </h4>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {entry.user}
-                        </p>
-                        <p className="text-sm text-foreground mt-2">
-                          {entry.details}
-                        </p>
-                      </div>
-
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">
-                        {entry.date}
-                      </span>
-                    </div>
+                {loadingAuditHistory ? (
+                  <div className="p-6 text-center text-muted-foreground">
+                    Cargando historial de auditoria...
                   </div>
-                ))}
+                ) : auditHistoryError ? (
+                  <div className="rounded-lg border border-error/30 bg-error/10 p-4 text-sm text-error">
+                    {auditHistoryError}
+                  </div>
+                ) : auditHistory.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                    No hay registros de auditoria para este requisito.
+                  </div>
+                ) : (
+                  auditHistory.map((entry) => (
+                    <div
+                      key={`${entry.type}-${entry.id}`}
+                      className="border border-border rounded-lg p-4 bg-background"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <h4 className="font-medium text-foreground">
+                            {entry.action}
+                          </h4>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {entry.user}
+                          </p>
+                          <p className="text-sm text-foreground mt-2">
+                            {entry.details}
+                          </p>
+
+                          {entry.type === 'estado' ? (
+                            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-muted-foreground">
+                              <span>
+                                Estado nuevo:{' '}
+                                <b>{entry.estadoNuevo || 'No definido'}</b>
+                              </span>
+                            </div>
+                          ) : entry.type === 'evidencia' ? (
+                            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-muted-foreground">
+                              <span>
+                                Evidencia:{' '}
+                                <b>
+                                  {entry.idEvidencia
+                                    ? `#${entry.idEvidencia}`
+                                    : 'No definido'}
+                                </b>
+                              </span>
+                              <span>
+                                Fecha evidencia:{' '}
+                                <b>{entry.fechaEvidencia || 'No definido'}</b>
+                              </span>
+                            </div>
+                          ) : entry.type === 'evento' ? (
+                            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-muted-foreground">
+                              <span>
+                                Evento:{' '}
+                                <b>
+                                  {entry.idEvento
+                                    ? `#${entry.idEvento}`
+                                    : 'No definido'}
+                                </b>
+                              </span>
+                              <span>
+                                Fecha evento:{' '}
+                                <b>{entry.fechaEvento || 'No definido'}</b>
+                              </span>
+                            </div>
+                          ) : entry.type === 'responsable' ? (
+                            <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-muted-foreground">
+                              <span>
+                                Responsable:{' '}
+                                <b>{entry.responsable || 'No definido'}</b>
+                              </span>
+                              <span>
+                                Correo:{' '}
+                                <b>{entry.responsableCorreo || 'No definido'}</b>
+                              </span>
+                              <span>
+                                Relación:{' '}
+                                <b>
+                                  {entry.idResponsableRequisito
+                                    ? `#${entry.idResponsableRequisito}`
+                                    : 'No definido'}
+                                </b>
+                              </span>
+                              {entry.observaciones ? (
+                                <span className="md:col-span-3">
+                                  Observaciones: <b>{entry.observaciones}</b>
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-muted-foreground">
+                              <span>
+                                Responsable:{' '}
+                                <b>{entry.responsable || 'No definido'}</b>
+                              </span>
+                              <span>
+                                Fecha planificada:{' '}
+                                <b>{entry.fechaPlanificada || 'No definido'}</b>
+                              </span>
+                              <span>
+                                Periodicidad:{' '}
+                                <b>{entry.periodicidad || 'No definido'}</b>
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          {entry.date ? formatApiDate(entry.date) : 'Sin fecha'}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             )}
           </div>
@@ -2505,8 +3001,15 @@ export default function ItemDetailModal({
       </div>
 
       {pdfViewer ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-card rounded-lg border border-border shadow-elevation-4 w-full max-w-6xl h-[90vh] overflow-hidden flex flex-col">
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onContextMenu={(event) => event.preventDefault()}
+          onCopy={(event) => event.preventDefault()}
+          onCut={(event) => event.preventDefault()}
+          onPaste={(event) => event.preventDefault()}
+          onDragStart={(event) => event.preventDefault()}
+        >
+          <div className="bg-card rounded-lg border border-border shadow-elevation-4 w-full max-w-6xl h-[90vh] overflow-hidden flex flex-col select-none">
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <div className="min-w-0">
                 <h3 className="text-lg font-semibold text-foreground truncate">
@@ -2533,19 +3036,26 @@ export default function ItemDetailModal({
             </div>
 
             {pdfViewer.type === 'image' ? (
-              <div className="flex-1 min-h-0 bg-background p-4 flex items-center justify-center overflow-auto">
+              <div
+                className="flex-1 min-h-0 bg-background p-4 flex items-center justify-center overflow-auto"
+                onContextMenu={(event) => event.preventDefault()}
+                onDragStart={(event) => event.preventDefault()}
+              >
                 <img
                   src={pdfViewer.url}
                   alt={pdfViewer.title}
+                  draggable={false}
                   className="max-h-full max-w-full object-contain rounded-md"
                 />
               </div>
             ) : (
-              <iframe
-                src={`${pdfViewer.url}#toolbar=0&navpanes=0`}
-                title={pdfViewer.title}
-                className="flex-1 w-full bg-background"
-              />
+              <div
+                className="flex-1 min-h-0 bg-background overflow-hidden"
+                onContextMenu={(event) => event.preventDefault()}
+                onDragStart={(event) => event.preventDefault()}
+              >
+                <PdfCanvasViewer url={pdfViewer.url} title={pdfViewer.title} />
+              </div>
             )}
           </div>
         </div>

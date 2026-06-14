@@ -33,6 +33,16 @@ interface ApiEmpresa {
   IdPais: number;
   Pais: string;
   CantidadRequisitos: number;
+  CantidadRequi?: number;
+  Cumplimiento?: number | null;
+  PorcentajeCumplimiento?: number | null;
+  RequisitosCumplidos?: number | null;
+  TotalRequisitosEvaluados?: number | null;
+  Compliance?: {
+    totalRequirements?: number | null;
+    completedRequirements?: number | null;
+    percentage?: number | null;
+  } | null;
 }
 
 const CompanyTypes = [
@@ -44,6 +54,16 @@ const CompanyTypes = [
   'Ambiental',
   'Corporativo',
 ];
+
+function toFiniteNumber(value: unknown, fallback = 0) {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : fallback;
+}
+
+function normalizePercentage(value: unknown) {
+  const numberValue = toFiniteNumber(value, 0);
+  return Math.min(100, Math.max(0, Math.round(numberValue)));
+}
 
 export default function CompanySelectionInteractive() {
   const router = useRouter();
@@ -156,18 +176,36 @@ export default function CompanySelectionInteractive() {
 
         const empresas: ApiEmpresa[] = Array.isArray(json?.Empresas)
           ? json.Empresas
-          : [];
+          : Array.isArray(json?.empresas)
+            ? json.empresas
+            : Array.isArray(json?.data)
+              ? json.data
+              : [];
 
-        const mapped: Company[] = empresas.map((e) => ({
-          id: String(e.IdEmpresa),
-          name: e.Empresa,
-          countryCode: String(e.IdPais),
-          countryName: e.Pais,
-          flagUrl: '',
-          itemCount: e.CantidadRequisitos ?? 0,
-          compliancePercentage: 0,
-          companyType: e.Tipo ?? 'Corporativo',
-        }));
+        const mapped: Company[] = empresas.map((e) => {
+          const compliancePercentage = normalizePercentage(
+            e.PorcentajeCumplimiento ??
+              e.Cumplimiento ??
+              e.Compliance?.percentage
+          );
+
+          return {
+            id: String(e.IdEmpresa),
+            name: e.Empresa,
+            countryCode: String(e.IdPais),
+            countryName: e.Pais,
+            flagUrl: '',
+            itemCount: toFiniteNumber(
+              e.TotalRequisitosEvaluados ??
+                e.Compliance?.totalRequirements ??
+                e.CantidadRequisitos ??
+                e.CantidadRequi,
+              0
+            ),
+            compliancePercentage,
+            companyType: e.Tipo ?? 'Corporativo',
+          };
+        });
 
         setCompanies(mapped);
       } catch (err: any) {

@@ -226,6 +226,11 @@ export default function ItemsTable({
     return String(item.category ?? item.Categoria ?? '').trim();
   };
 
+  const getRequirementTitle = (item: ComplianceItem) => {
+    const requirementNumber = item.requisitoId ? `#${item.requisitoId} — ` : '';
+    return `${requirementNumber}${item.name}`;
+  };
+
   const getSortableValue = (item: ComplianceItem, key: keyof ComplianceItem) => {
     if (key === 'responsible') return getResponsibleText(item);
     if (key === 'plannedDate') return getPlannedDateText(item);
@@ -388,7 +393,7 @@ export default function ItemsTable({
                 <td className="px-6 py-4">
                   <div>
                     <p className="font-semibold text-foreground whitespace-pre-line">
-                      {item.name}
+                      {getRequirementTitle(item)}
                     </p>
                     {getCategoryText(item) && (
                       <p className="text-sm text-muted-foreground mt-1 whitespace-pre-line">
@@ -453,7 +458,7 @@ export default function ItemsTable({
             <div className="flex items-start justify-between mb-3">
               <div className="flex-1 min-w-0 pr-4">
                 <h4 className="text-sm font-semibold text-foreground mb-1 whitespace-pre-line">
-                  {item.name}
+                  {getRequirementTitle(item)}
                 </h4>
                 {getCategoryText(item) && (
                   <p className="text-xs text-muted-foreground mb-1 whitespace-pre-line">
