@@ -270,6 +270,16 @@ export default function CompanyDashboardInteractive() {
       ? hasEmpresaPermission(selectedCompanyId, 'EVALUACIONES_EDITAR')
       : false);
 
+  const canCreateEvidence =
+    canEditEvaluationDetail ||
+    !!session?.isGlobalAdmin ||
+    (selectedCompanyId
+      ? hasEmpresaPermission(selectedCompanyId, 'EMPRESA_LECTOR') ||
+        (currentEmpresa?.roles || [])
+          .map((role) => String(role).toUpperCase())
+          .includes('EMPRESA_LECTOR')
+      : false);
+
   // ==========================================================
   // 7) Estado base / auth
   // ==========================================================
@@ -1338,6 +1348,7 @@ export default function CompanyDashboardInteractive() {
           await loadDashboard();
         }}
         canEdit={canEditEvaluationDetail}
+        canCreateEvidence={canCreateEvidence}
         canDownloadFiles={canDownloadFiles}
       />
     </div>

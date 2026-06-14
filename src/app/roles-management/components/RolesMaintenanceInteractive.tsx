@@ -412,6 +412,39 @@ export default function RolesMaintenanceInteractive() {
     }
   };
 
+  const activatePermisoInRole = async (item: RolPermisoItem) => {
+    if (!selectedRole?.IdRol) return;
+
+    if (
+      !confirm(
+        `¿Desea activar el permiso "${item.Permiso?.Nombre || ''}" para este rol?`
+      )
+    ) {
+      return;
+    }
+
+    setSavingRolPermiso(true);
+
+    try {
+      await apiFetch(`${API_URL}/api/roles/${selectedRole.IdRol}/permisos`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          idPermiso: Number(item.IdPermiso),
+          estado: 1,
+        }),
+      });
+
+      await loadRolePermisos(selectedRole.IdRol);
+    } catch (error: any) {
+      alert(error?.message || 'Error activando permiso del rol');
+    } finally {
+      setSavingRolPermiso(false);
+    }
+  };
+
   if (loadingPage || authLoading) {
     return (
       <div className="min-h-screen bg-background">
@@ -913,12 +946,23 @@ export default function RolesMaintenanceInteractive() {
                             </span>
                           </td>
                           <td className="px-4 py-4">
-                            <button
-                              onClick={() => removePermisoFromRole(item)}
-                              className="px-3 py-2 text-sm border border-error text-error rounded-md hover:bg-error/10 transition-smooth"
-                            >
-                              Inactivar
-                            </button>
+                            {Number(item.Estado) === 1 ? (
+                              <button
+                                onClick={() => removePermisoFromRole(item)}
+                                disabled={savingRolPermiso}
+                                className="px-3 py-2 text-sm border border-error text-error rounded-md hover:bg-error/10 transition-smooth disabled:opacity-50"
+                              >
+                                Inactivar
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => activatePermisoInRole(item)}
+                                disabled={savingRolPermiso}
+                                className="px-3 py-2 text-sm border border-success text-success rounded-md hover:bg-success/10 transition-smooth disabled:opacity-50"
+                              >
+                                Activar
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
